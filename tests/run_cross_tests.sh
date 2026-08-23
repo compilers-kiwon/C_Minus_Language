@@ -8,8 +8,9 @@
 # prints does not depend on the machine it runs on, so reusing them is the
 # point rather than a shortcut.
 #
-# Needs a cross toolchain and a user-mode emulator. On Ubuntu:
-#   sudo apt install -y gcc-aarch64-linux-gnu qemu-user
+# Needs a cross toolchain, its target libc headers, and a user-mode emulator.
+# On Ubuntu:
+#   sudo apt install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
 #
 # Everything is overridable, so another target can be tried without editing:
 #   CROSS_TARGET=riscv64-linux-gnu CROSS_CC=riscv64-linux-gnu-gcc \
@@ -52,7 +53,14 @@ echo "cross target: $CROSS_TARGET   driver: $CROSS_CC   emulator: $CROSS_EMU"
 # The runtime has to be built for the target too; the host archive would be
 # rejected by the cross linker.
 if ! "$CROSS_CC" -O2 -c "$ROOT/runtime/cminus_rt.c" -o "$work/cminus_rt.o" 2>&1; then
-  echo "cross tests failed: cannot build the runtime for $CROSS_TARGET" >&2
+  # A driver that exists but cannot compile is a broken install, not an
+  # absent one, so this fails rather than skipping. The usual cause is that
+  # the target C library headers were left out: on Debian and Ubuntu they
+  # live in libc6-dev-<arch>-cross, which the compiler package only
+  # recommends and so is dropped by --no-install-recommends.
+  echo "cross tests failed: '$CROSS_CC' cannot compile for $CROSS_TARGET" >&2
+  echo "  are the target libc headers installed? (Debian/Ubuntu:" >&2
+  echo "  libc6-dev-<arch>-cross, e.g. libc6-dev-arm64-cross)" >&2
   exit 1
 fi
 ar_tool="$CROSS_AR"
