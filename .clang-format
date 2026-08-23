@@ -1,0 +1,3 @@
+# The sources follow LLVM style, which is also what the LLVM headers this
+# project includes are written in.
+BasedOnStyle: LLVM

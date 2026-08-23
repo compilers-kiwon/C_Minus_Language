@@ -15,7 +15,23 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
+option(CMINUS_WERROR "Treat compiler warnings as errors" OFF)
+option(CMINUS_SANITIZERS "Build with the address and undefined-behaviour sanitizers" OFF)
+
 find_package(LLVM REQUIRED CONFIG)
+
+# A version floor rather than find_package(LLVM 21 ...): LLVM's config file
+# treats a requested version as exact down to the minor number, so asking for
+# "21" rejects 21.1. The floor is 21 because the code generator uses the
+# Triple-based overloads of TargetRegistry::lookupTarget,
+# TargetMachine::createTargetMachine and Module::setTargetTriple, which
+# replaced the string ones in that release.
+if(LLVM_PACKAGE_VERSION VERSION_LESS 21)
+  message(FATAL_ERROR
+    "LLVM 21 or newer is required, but ${LLVM_PACKAGE_VERSION} was found at "
+    "${LLVM_DIR}. Point CMake at a newer one with -DLLVM_DIR=<path>.")
+endif()
+
 message(STATUS "Using LLVM ${LLVM_PACKAGE_VERSION} from ${LLVM_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 
@@ -44,8 +60,21 @@ target_link_libraries(cmc PRIVATE ${CMINUS_LLVM_LIBS})
 
 if(MSVC)
   target_compile_options(cmc PRIVATE /W4 /permissive-)
+  if(CMINUS_WERROR)
+    target_compile_options(cmc PRIVATE /WX)
+  endif()
 else()
   target_compile_options(cmc PRIVATE -Wall -Wextra -Wpedantic)
+  if(CMINUS_WERROR)
+    target_compile_options(cmc PRIVATE -Werror)
+  endif()
+endif()
+
+if(CMINUS_SANITIZERS)
+  # -fno-sanitize-recover makes a report fail the run, so CI notices.
+  set(CMINUS_SANITIZER_FLAGS -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+  target_compile_options(cmc PRIVATE ${CMINUS_SANITIZER_FLAGS})
+  target_link_options(cmc PRIVATE ${CMINUS_SANITIZER_FLAGS})
 endif()
 
 # LLVM is often built without RTTI; a translation unit that includes its
