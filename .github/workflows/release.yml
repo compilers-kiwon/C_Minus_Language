@@ -81,19 +81,22 @@ jobs:
 
           - `bin/cmc` — the compiler
           - `lib/libcminus_rt.a` — `input`, `output` and the negative-subscript
-            handler, to link into compiled programs
+            handler, linked into compiled programs
           - `runtime/`, `examples/`, `docs/spec/`
 
           ### Use
 
           ```
-          bin/cmc -O2 -c prog.cm -o prog.o
-          cc prog.o lib/libcminus_rt.a -o prog
+          bin/cmc -O2 prog.cm -o prog
           ```
 
-          `bin/cmc` with no output flag writes textual LLVM IR to standard
-          output. Built on Ubuntu 24.04 for x86-64; it needs a matching glibc
-          and libstdc++, but LLVM itself is linked in.
+          `cmc` finds the runtime in `../lib` relative to itself, so the layout
+          above works unpacked anywhere. Linking goes through `cc`, which must
+          be on PATH; `-c` stops at an object file and `--emit-llvm` writes
+          textual LLVM IR instead.
+
+          Built on Ubuntu 24.04 for x86-64; it needs a matching glibc and
+          libstdc++, but LLVM itself is linked in.
           NOTES
 
           gh release create "$TAG" \

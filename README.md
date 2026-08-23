@@ -19,6 +19,7 @@ LLVM back end.
 | Scanner | Hand-written DFA — no flex |
 | Parser | Hand-written recursive descent — no bison |
 | Back end | LLVM IR, then LLVM's own code generator for object files |
+| Linking | A C driver (`cc`), told to use `lld` when it is installed |
 
 The grammar is LALR(1) apart from the dangling-else ambiguity, so a generated
 parser would have worked; writing it by hand buys much better error messages
@@ -53,27 +54,36 @@ Two options exist for checking rather than developing:
 
 ## Running
 
-By default `cmc` writes textual LLVM IR to standard output:
+`cmc` compiles and links, so one command produces a program:
 
 ```bash
-build/cmc examples/gcd.cm
+build/cmc -O2 examples/gcd.cm -o gcd && echo "270 192" | ./gcd
 ```
 
-To produce a program, compile to an object file and link it against the
-runtime, which supplies `input`, `output` and the negative-subscript handler:
-
-```bash
-build/cmc -O2 -c examples/gcd.cm -o gcd.o && clang gcd.o build/libcminus_rt.a -o gcd
-```
+`-c` stops at an object file and `--emit-llvm` writes textual IR to standard
+output instead.
 
 ```
 usage: cmc [options] <file.cm>
 
+By default the program is compiled and linked into an executable.
+
 Output:
-  --emit-llvm       Write textual LLVM IR (the default)
-  -c                Write a native object file
-  -o <file>         Write to <file> ('-' means standard output)
+  -c                Compile only; write an object file
+  --emit-llvm       Write textual LLVM IR instead of linking
+  -o <file>         Output path (default a.out, or <input>.o with -c;
+                    '-' means standard output)
   -O0 -O1 -O2 -O3   Optimization level (default -O0)
+
+Linking:
+  --cc <command>    C driver used to link (default $CMINUS_CC, else
+                    cc, clang or gcc)
+  --use-ld=<name>   Pass -fuse-ld=<name> to the driver; the default
+                    is lld when it is installed
+  --runtime <file>  Path to libcminus_rt.a (default $CMINUS_RUNTIME,
+                    else next to the compiler)
+  -save-temps       Keep the intermediate object file
+  -v                Print the link command
 
 Stages:
   --dump-tokens     Print the token stream and stop
@@ -88,6 +98,28 @@ Other:
 ```
 
 Each `--dump-*` flag stops the pipeline right after the stage it prints.
+
+### Why the link goes through a C driver
+
+LLVM ships LLD, but LLD replaces `ld`, not `cc`. Turning one object file into
+a program on this machine takes a link line like:
+
+```
+ld -z relro --hash-style=gnu -m elf_x86_64 -pie
+   -dynamic-linker /lib64/ld-linux-x86-64.so.2
+   Scrt1.o crti.o /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o
+   -L... (six paths) prog.o -lgcc -lgcc_s -lc ...
+```
+
+The crt objects, the search paths, the dynamic loader and the gcc version in
+that path are the *driver's* knowledge, and they differ per distribution and
+per architecture. A compiler can only skip the driver if it also ships a libc.
+So `cmc` invokes `cc` and, when `ld.lld` is installed, adds `-fuse-ld=lld` so
+that LLD does the actual linking.
+
+The runtime archive is found without configuration: `$CMINUS_RUNTIME` first,
+then next to the compiler (the build tree), then `../lib` (an unpacked
+release).
 
 ## How C- maps onto LLVM
 
@@ -125,10 +157,11 @@ CMC=build/cmc tests/run_tests.sh            # check
 CMC=build/cmc tests/run_tests.sh --update   # re-record the expected output
 ```
 
-End-to-end suite. Each `tests/exec/<name>.cm` is compiled, linked, and run on
-`<name>.in`; what it prints is compared against `<name>.out`. Every case runs
-at both `-O0` and `-O2` and must agree, which catches code generation that
-only happens to work unoptimized:
+End-to-end suite. Each `tests/exec/<name>.cm` is built, run on `<name>.in`,
+and what it prints compared against `<name>.expected`. Every case is built
+three ways and all three must agree: `-O0` and `-O2` linked by `cmc`, which
+catches code generation that only happens to work unoptimized, and `-c`
+followed by a separate link, which keeps that path honest:
 
 ```bash
 CMC=build/cmc tests/run_exec_tests.sh
