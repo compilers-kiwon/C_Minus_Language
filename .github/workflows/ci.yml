@@ -81,6 +81,9 @@ jobs:
       - name: Test
         env:
           CC: clang-${{ env.LLVM_VERSION }}
+          # The cross suite skips itself where no cross toolchain exists, and
+          # a skip here would be indistinguishable from a pass.
+          CROSS_REQUIRED: "1"
         run: ctest --test-dir build --output-on-failure
 
   sanitizers:
@@ -120,4 +123,7 @@ jobs:
       - name: Test
         env:
           CC: clang-${{ env.LLVM_VERSION }}
+          # The cross suite skips itself where no cross toolchain exists, and
+          # a skip here would be indistinguishable from a pass.
+          CROSS_REQUIRED: "1"
         run: ctest --test-dir build --output-on-failure

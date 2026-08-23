@@ -52,6 +52,7 @@ jobs:
       - name: Test
         env:
           CC: clang-${{ env.LLVM_VERSION }}
+          CROSS_REQUIRED: "1"
         run: ctest --test-dir build --output-on-failure
 
       - name: Package

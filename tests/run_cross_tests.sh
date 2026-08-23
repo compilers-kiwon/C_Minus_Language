@@ -12,6 +12,9 @@
 # On Ubuntu:
 #   sudo apt install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
 #
+# CROSS_REQUIRED=1 turns "tools missing" from a skip into a failure, which is
+# what CI wants: there, a skip would look just like a pass.
+#
 # Everything is overridable, so another target can be tried without editing:
 #   CROSS_TARGET=riscv64-linux-gnu CROSS_CC=riscv64-linux-gnu-gcc \
 #   CROSS_SYSROOT=/usr/riscv64-linux-gnu CROSS_EMU=qemu-riscv64 \
@@ -30,9 +33,15 @@ CROSS_AR="${CROSS_AR:-${CROSS_TARGET}-ar}"
 CROSS_SYSROOT="${CROSS_SYSROOT:-/usr/${CROSS_TARGET}}"
 CROSS_EMU="${CROSS_EMU:-qemu-${CROSS_TARGET%%-*}}"
 
-# Missing tools mean "not tested here", not "broken". A machine without a
-# cross toolchain should not fail the suite.
+# Missing tools mean "not tested here", not "broken": a machine without a
+# cross toolchain should not fail the suite. Somewhere that is supposed to
+# have one, though, a skip is indistinguishable from a pass and hides exactly
+# the breakage this suite exists to catch -- so CI sets CROSS_REQUIRED.
 skip() {
+  if [[ -n "${CROSS_REQUIRED:-}" ]]; then
+    echo "cross tests were required but cannot run: $1" >&2
+    exit 1
+  fi
   echo "cross tests skipped: $1"
   echo "0 passed, 0 failed"
   exit 0
