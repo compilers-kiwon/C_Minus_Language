@@ -1,0 +1,13 @@
+build/
+out/
+cmake-build-*/
+compile_commands.json
+.cache/
+*.o
+*.obj
+*.ll
+*.bc
+*.s
+*.exe
+*.out
+tests/**/*.actual

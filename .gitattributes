@@ -1,0 +1,4 @@
+# Golden files are byte-compared; keep them LF everywhere so a Windows
+# checkout cannot silently break the test suite.
+* text=auto eol=lf
+*.expected -text
