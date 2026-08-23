@@ -40,7 +40,7 @@ cmake --build build
 ## Running
 
 ```bash
-build/cmc --dump-ast examples/gcd.cm
+build/cmc --dump-symbols examples/gcd.cm
 ```
 
 ```
@@ -49,6 +49,7 @@ usage: cmc [options] <file.cm>
 Options:
   --dump-tokens   Print the token stream and stop
   --dump-ast      Print the parse tree and stop
+  --dump-symbols  Print the symbol table and stop
   --color         Force colored diagnostics
   --no-color      Disable colored diagnostics
   -h, --help      Show this message
@@ -66,6 +67,7 @@ compares the combined stdout+stderr, plus the exit status, against
 | :- | :- |
 | `tests/lex/` | `--dump-tokens` |
 | `tests/parse/` | `--dump-ast` |
+| `tests/sema/` | `--dump-symbols` |
 
 ```bash
 CMC=build/cmc tests/run_tests.sh            # check
@@ -83,6 +85,7 @@ docs/spec/        language spec and grammar analysis
 examples/         the two sample programs from the spec
 tests/lex/        scanner golden-file tests
 tests/parse/      parser golden-file tests
+tests/sema/       semantic-analysis golden-file tests
 ```
 
 ## Status
@@ -92,5 +95,5 @@ tests/parse/      parser golden-file tests
 | Scanner (DFA, spec §1) | done |
 | Diagnostics (caret rendering, error recovery) | done |
 | AST + recursive-descent parser (spec §2) | done |
-| Semantic analysis, symbol table (spec §3) | not started |
+| Symbol table + semantic analysis (spec §3) | done |
 | LLVM IR generation | not started |
