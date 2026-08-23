@@ -1,5 +1,7 @@
 # cmc — a C-Minus compiler
 
+[![CI](https://github.com/compilers-kiwon/C_Minus_Language/actions/workflows/ci.yml/badge.svg)](https://github.com/compilers-kiwon/C_Minus_Language/actions/workflows/ci.yml)
+
 C-Minus (C−) is the teaching language from K. Louden, *Compiler Construction:
 Principles and Practice*, Appendix A. This is a from-scratch compiler for it:
 a hand-written scanner and recursive-descent parser, a semantic pass, and an
@@ -24,17 +26,30 @@ and makes the left-recursion removal explicit.
 
 ## Building
 
-Requires a C++17 compiler, CMake ≥ 3.20 and LLVM development headers.
-On Ubuntu:
+Requires a C++17 compiler, CMake ≥ 3.20 and **LLVM 21 or newer** — the code
+generator uses the Triple-based overloads of `TargetRegistry::lookupTarget`,
+`TargetMachine::createTargetMachine` and `Module::setTargetTriple`, which
+replaced the string ones in that release.
 
 ```bash
 sudo apt install -y build-essential cmake ninja-build clang llvm llvm-dev
 ```
 
+If the distribution is older than LLVM 21, install it from
+[apt.llvm.org](https://apt.llvm.org) and point CMake at it with
+`-DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm`.
+
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ```
+
+Two options exist for checking rather than developing:
+
+| Option | Effect |
+| :- | :- |
+| `-DCMINUS_WERROR=ON` | Warnings become errors |
+| `-DCMINUS_SANITIZERS=ON` | Build with ASan and UBSan, not recovering from a report |
 
 ## Running
 
@@ -121,12 +136,26 @@ CMC=build/cmc tests/run_exec_tests.sh
 
 `ctest --test-dir build` runs both.
 
+## Continuous integration
+
+[`ci.yml`](.github/workflows/ci.yml) builds with gcc and clang, in Debug and
+Release, with warnings as errors, and runs both suites in each. A fifth job
+repeats them under ASan and UBSan. Reproduce any of it locally with the
+options in the build table above.
+
+[`release.yml`](.github/workflows/release.yml) reacts to a `v*` tag: it builds
+Release, refuses to continue unless the tests pass, and publishes a tarball of
+`bin/cmc`, `lib/libcminus_rt.a`, the runtime source, the examples and the spec.
+LLVM is linked into the binary, so the archive only needs a matching glibc and
+libstdc++.
+
 ## Layout
 
 ```
 include/cminus/   public headers
 src/              implementation
 runtime/          input, output and the negative-subscript handler
+.github/          CI and release workflows
 docs/spec/        language spec and grammar analysis
 examples/         the two sample programs from the spec
 tests/lex/        scanner golden-file tests
