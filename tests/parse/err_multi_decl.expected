@@ -1,0 +1,14 @@
+Program
+  FunDecl 'main' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:1>
+        ExprStmt  <3:3>
+          AssignExpr  <3:5>
+            VarExpr 'a'  <3:3>
+            NumExpr 1  <3:7>
+err_multi_decl.cm:2:8: error: C- declares one variable per declaration; write a separate declaration for each name
+  { int a, b;
+         ^
+1 error generated.
+exit status: 1

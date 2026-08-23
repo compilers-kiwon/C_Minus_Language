@@ -1,0 +1,41 @@
+Program
+  FunDecl 'main' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:1>
+        VarDecl 'x' : int  <2:7>
+        VarDecl 'y' : int  <2:14>
+        ExprStmt  <3:3>
+          AssignExpr  <3:5>
+            VarExpr 'x'  <3:3>
+            CallExpr 'input'  <3:7>
+              (no arguments)
+        ExprStmt  <4:3>
+          AssignExpr  <4:5>
+            VarExpr 'y'  <4:3>
+            NumExpr 0  <4:7>
+        IfStmt  <5:3>
+          cond:
+            BinaryExpr '<'  <5:9>
+              VarExpr 'x'  <5:7>
+              NumExpr 0  <5:11>
+          then:
+            IfStmt  <5:14>
+              cond:
+                BinaryExpr '<'  <5:20>
+                  VarExpr 'x'  <5:18>
+                  NumExpr 10  <5:22>
+              then:
+                ExprStmt  <5:26>
+                  AssignExpr  <5:28>
+                    VarExpr 'y'  <5:26>
+                    NumExpr 1  <5:30>
+              else:
+                ExprStmt  <5:38>
+                  AssignExpr  <5:40>
+                    VarExpr 'y'  <5:38>
+                    NumExpr 2  <5:42>
+        ExprStmt  <6:3>
+          CallExpr 'output'  <6:3>
+            VarExpr 'y'  <6:10>
+exit status: 0

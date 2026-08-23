@@ -1,0 +1,18 @@
+Program
+  VarDecl 'b' : int  <2:5>
+  FunDecl 'main' -> void  <3:6>
+    (no parameters)
+    body:
+      CompoundStmt  <4:1>
+        (empty)
+err_recovery.cm:2:1: error: expected ';' after the declaration of 'a', found 'int'
+  int b;
+  ^
+err_recovery.cm:5:3: error: expected ';' after the declaration of 'c', found identifier 'c'
+    c = 1;
+    ^
+err_recovery.cm:7:1: error: expected ';' after the expression, found '}'
+  }
+  ^
+3 errors generated.
+exit status: 1

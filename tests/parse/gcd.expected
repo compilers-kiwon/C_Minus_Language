@@ -1,0 +1,47 @@
+Program
+  FunDecl 'gcd' -> int  <3:5>
+    ParamDecl 'u' : int  <3:14>
+    ParamDecl 'v' : int  <3:21>
+    body:
+      CompoundStmt  <4:1>
+        IfStmt  <4:3>
+          cond:
+            BinaryExpr '=='  <4:9>
+              VarExpr 'v'  <4:7>
+              NumExpr 0  <4:12>
+          then:
+            ReturnStmt  <4:15>
+              VarExpr 'u'  <4:22>
+          else:
+            ReturnStmt  <5:8>
+              CallExpr 'gcd'  <5:15>
+                VarExpr 'v'  <5:19>
+                BinaryExpr '-'  <5:22>
+                  VarExpr 'u'  <5:21>
+                  BinaryExpr '*'  <5:26>
+                    BinaryExpr '/'  <5:24>
+                      VarExpr 'u'  <5:23>
+                      VarExpr 'v'  <5:25>
+                    VarExpr 'v'  <5:27>
+  FunDecl 'main' -> void  <8:6>
+    (no parameters)
+    body:
+      CompoundStmt  <9:1>
+        VarDecl 'x' : int  <9:7>
+        VarDecl 'y' : int  <9:14>
+        ExprStmt  <10:3>
+          AssignExpr  <10:5>
+            VarExpr 'x'  <10:3>
+            CallExpr 'input'  <10:7>
+              (no arguments)
+        ExprStmt  <10:16>
+          AssignExpr  <10:18>
+            VarExpr 'y'  <10:16>
+            CallExpr 'input'  <10:20>
+              (no arguments)
+        ExprStmt  <11:3>
+          CallExpr 'output'  <11:3>
+            CallExpr 'gcd'  <11:10>
+              VarExpr 'x'  <11:14>
+              VarExpr 'y'  <11:16>
+exit status: 0

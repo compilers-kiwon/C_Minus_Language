@@ -1,0 +1,14 @@
+Program
+  FunDecl 'main' -> void  <2:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:17>
+        ExprStmt  <2:19>
+          CallExpr 'output'  <2:19>
+            CallExpr 'f'  <2:26>
+              NumExpr 1  <2:28>
+err_prototype.cm:1:13: error: expected '{' to begin the body of 'f'; C- has no function prototypes, found ';'
+  int f(int x);
+              ^
+1 error generated.
+exit status: 1

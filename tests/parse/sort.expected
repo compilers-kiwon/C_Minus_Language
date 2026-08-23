@@ -1,0 +1,173 @@
+Program
+  VarDecl 'x' : int[10]  <3:5>
+  FunDecl 'minloc' -> int  <4:5>
+    ParamDecl 'a' : int[]  <4:18>
+    ParamDecl 'low' : int  <4:27>
+    ParamDecl 'high' : int  <4:36>
+    body:
+      CompoundStmt  <5:1>
+        VarDecl 'i' : int  <5:7>
+        VarDecl 'x' : int  <5:14>
+        VarDecl 'k' : int  <5:21>
+        ExprStmt  <6:3>
+          AssignExpr  <6:5>
+            VarExpr 'k'  <6:3>
+            VarExpr 'low'  <6:7>
+        ExprStmt  <7:3>
+          AssignExpr  <7:5>
+            VarExpr 'x'  <7:3>
+            VarExpr 'a'  <7:7>
+              index:
+                VarExpr 'low'  <7:9>
+        ExprStmt  <8:3>
+          AssignExpr  <8:5>
+            VarExpr 'i'  <8:3>
+            BinaryExpr '+'  <8:11>
+              VarExpr 'low'  <8:7>
+              NumExpr 1  <8:13>
+        WhileStmt  <9:3>
+          cond:
+            BinaryExpr '<'  <9:12>
+              VarExpr 'i'  <9:10>
+              VarExpr 'high'  <9:14>
+          body:
+            CompoundStmt  <10:5>
+              IfStmt  <10:7>
+                cond:
+                  BinaryExpr '<'  <10:16>
+                    VarExpr 'a'  <10:11>
+                      index:
+                        VarExpr 'i'  <10:13>
+                    VarExpr 'x'  <10:18>
+                then:
+                  CompoundStmt  <11:9>
+                    ExprStmt  <11:11>
+                      AssignExpr  <11:13>
+                        VarExpr 'x'  <11:11>
+                        VarExpr 'a'  <11:15>
+                          index:
+                            VarExpr 'i'  <11:17>
+                    ExprStmt  <12:11>
+                      AssignExpr  <12:13>
+                        VarExpr 'k'  <12:11>
+                        VarExpr 'i'  <12:15>
+              ExprStmt  <13:7>
+                AssignExpr  <13:9>
+                  VarExpr 'i'  <13:7>
+                  BinaryExpr '+'  <13:13>
+                    VarExpr 'i'  <13:11>
+                    NumExpr 1  <13:15>
+        ReturnStmt  <15:3>
+          VarExpr 'k'  <15:10>
+  FunDecl 'sort' -> void  <17:6>
+    ParamDecl 'a' : int[]  <17:16>
+    ParamDecl 'low' : int  <17:25>
+    ParamDecl 'high' : int  <17:34>
+    body:
+      CompoundStmt  <18:1>
+        VarDecl 'i' : int  <18:7>
+        VarDecl 'k' : int  <18:14>
+        ExprStmt  <19:3>
+          AssignExpr  <19:5>
+            VarExpr 'i'  <19:3>
+            VarExpr 'low'  <19:7>
+        WhileStmt  <20:3>
+          cond:
+            BinaryExpr '<'  <20:12>
+              VarExpr 'i'  <20:10>
+              BinaryExpr '-'  <20:18>
+                VarExpr 'high'  <20:14>
+                NumExpr 1  <20:19>
+          body:
+            CompoundStmt  <21:5>
+              VarDecl 't' : int  <21:11>
+              ExprStmt  <22:7>
+                AssignExpr  <22:9>
+                  VarExpr 'k'  <22:7>
+                  CallExpr 'minloc'  <22:11>
+                    VarExpr 'a'  <22:18>
+                    VarExpr 'i'  <22:20>
+                    VarExpr 'high'  <22:22>
+              ExprStmt  <23:7>
+                AssignExpr  <23:9>
+                  VarExpr 't'  <23:7>
+                  VarExpr 'a'  <23:11>
+                    index:
+                      VarExpr 'k'  <23:13>
+              ExprStmt  <24:7>
+                AssignExpr  <24:12>
+                  VarExpr 'a'  <24:7>
+                    index:
+                      VarExpr 'k'  <24:9>
+                  VarExpr 'a'  <24:14>
+                    index:
+                      VarExpr 'i'  <24:16>
+              ExprStmt  <25:7>
+                AssignExpr  <25:12>
+                  VarExpr 'a'  <25:7>
+                    index:
+                      VarExpr 'i'  <25:9>
+                  VarExpr 't'  <25:14>
+              ExprStmt  <26:7>
+                AssignExpr  <26:9>
+                  VarExpr 'i'  <26:7>
+                  BinaryExpr '+'  <26:13>
+                    VarExpr 'i'  <26:11>
+                    NumExpr 1  <26:15>
+  FunDecl 'main' -> void  <29:6>
+    (no parameters)
+    body:
+      CompoundStmt  <30:1>
+        VarDecl 'i' : int  <30:7>
+        ExprStmt  <31:3>
+          AssignExpr  <31:5>
+            VarExpr 'i'  <31:3>
+            NumExpr 0  <31:7>
+        WhileStmt  <32:3>
+          cond:
+            BinaryExpr '<'  <32:12>
+              VarExpr 'i'  <32:10>
+              NumExpr 10  <32:14>
+          body:
+            CompoundStmt  <33:5>
+              ExprStmt  <33:7>
+                AssignExpr  <33:12>
+                  VarExpr 'x'  <33:7>
+                    index:
+                      VarExpr 'i'  <33:9>
+                  CallExpr 'input'  <33:14>
+                    (no arguments)
+              ExprStmt  <34:7>
+                AssignExpr  <34:9>
+                  VarExpr 'i'  <34:7>
+                  BinaryExpr '+'  <34:13>
+                    VarExpr 'i'  <34:11>
+                    NumExpr 1  <34:15>
+        ExprStmt  <35:3>
+          CallExpr 'sort'  <35:3>
+            VarExpr 'x'  <35:8>
+            NumExpr 0  <35:10>
+            NumExpr 10  <35:12>
+        ExprStmt  <36:3>
+          AssignExpr  <36:5>
+            VarExpr 'i'  <36:3>
+            NumExpr 0  <36:7>
+        WhileStmt  <37:3>
+          cond:
+            BinaryExpr '<'  <37:12>
+              VarExpr 'i'  <37:10>
+              NumExpr 10  <37:14>
+          body:
+            CompoundStmt  <38:5>
+              ExprStmt  <38:7>
+                CallExpr 'output'  <38:7>
+                  VarExpr 'x'  <38:14>
+                    index:
+                      VarExpr 'i'  <38:16>
+              ExprStmt  <39:7>
+                AssignExpr  <39:9>
+                  VarExpr 'i'  <39:7>
+                  BinaryExpr '+'  <39:13>
+                    VarExpr 'i'  <39:11>
+                    NumExpr 1  <39:15>
+exit status: 0

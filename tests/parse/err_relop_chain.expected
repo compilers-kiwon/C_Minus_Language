@@ -1,0 +1,15 @@
+Program
+  FunDecl 'main' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:1>
+        VarDecl 'x' : int  <2:7>
+        ExprStmt  <3:3>
+          AssignExpr  <3:5>
+            VarExpr 'x'  <3:3>
+            NumExpr 0  <3:7>
+err_relop_chain.cm:4:13: error: relational operators do not associate in C-; parenthesize one of the comparisons
+    if (0 < x < 10) x = 1;
+              ^
+1 error generated.
+exit status: 1

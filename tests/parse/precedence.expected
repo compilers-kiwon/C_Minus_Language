@@ -1,0 +1,61 @@
+Program
+  FunDecl 'main' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:1>
+        VarDecl 'a' : int  <2:7>
+        VarDecl 'b' : int  <2:14>
+        VarDecl 'c' : int  <2:21>
+        VarDecl 'd' : int  <2:28>
+        ExprStmt  <3:3>
+          AssignExpr  <3:5>
+            VarExpr 'a'  <3:3>
+            NumExpr 1  <3:7>
+        ExprStmt  <3:10>
+          AssignExpr  <3:12>
+            VarExpr 'b'  <3:10>
+            NumExpr 2  <3:14>
+        ExprStmt  <3:17>
+          AssignExpr  <3:19>
+            VarExpr 'c'  <3:17>
+            NumExpr 3  <3:21>
+        ExprStmt  <3:24>
+          AssignExpr  <3:26>
+            VarExpr 'd'  <3:24>
+            NumExpr 4  <3:28>
+        ExprStmt  <4:3>
+          AssignExpr  <4:5>
+            VarExpr 'a'  <4:3>
+            BinaryExpr '-'  <4:17>
+              BinaryExpr '+'  <4:9>
+                VarExpr 'b'  <4:7>
+                BinaryExpr '*'  <4:13>
+                  VarExpr 'c'  <4:11>
+                  VarExpr 'd'  <4:15>
+              BinaryExpr '/'  <4:21>
+                VarExpr 'b'  <4:19>
+                VarExpr 'c'  <4:23>
+        ExprStmt  <5:3>
+          AssignExpr  <5:5>
+            VarExpr 'a'  <5:3>
+            BinaryExpr '*'  <5:15>
+              BinaryExpr '+'  <5:10>
+                VarExpr 'b'  <5:8>
+                VarExpr 'c'  <5:12>
+              VarExpr 'd'  <5:17>
+        ExprStmt  <6:3>
+          AssignExpr  <6:5>
+            VarExpr 'a'  <6:3>
+            AssignExpr  <6:9>
+              VarExpr 'b'  <6:7>
+              AssignExpr  <6:13>
+                VarExpr 'c'  <6:11>
+                VarExpr 'd'  <6:15>
+        ExprStmt  <7:3>
+          CallExpr 'output'  <7:3>
+            BinaryExpr '<'  <7:12>
+              VarExpr 'a'  <7:10>
+              BinaryExpr '+'  <7:16>
+                VarExpr 'b'  <7:14>
+                VarExpr 'c'  <7:18>
+exit status: 0

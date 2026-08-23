@@ -1,0 +1,27 @@
+Program
+  FunDecl 'nothing' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <1:20>
+        (empty)
+  FunDecl 'main' -> void  <2:6>
+    (no parameters)
+    body:
+      CompoundStmt  <3:1>
+        ExprStmt (empty)  <3:3>
+        CompoundStmt  <4:3>
+          (empty)
+        IfStmt  <5:3>
+          cond:
+            NumExpr 0  <5:7>
+          then:
+            ExprStmt (empty)  <5:10>
+          else:
+            ExprStmt (empty)  <5:17>
+        WhileStmt  <6:3>
+          cond:
+            NumExpr 0  <6:10>
+          body:
+            ExprStmt (empty)  <6:13>
+        ReturnStmt (no value)  <7:3>
+exit status: 0

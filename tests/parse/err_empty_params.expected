@@ -1,0 +1,14 @@
+Program
+  FunDecl 'main' -> void  <3:6>
+    (no parameters)
+    body:
+      CompoundStmt  <4:1>
+        ExprStmt  <4:3>
+          CallExpr 'output'  <4:3>
+            CallExpr 'f'  <4:10>
+              (no arguments)
+err_empty_params.cm:1:7: error: C- has no empty parameter list; write '(void)'
+  int f()
+        ^
+1 error generated.
+exit status: 1

@@ -1,0 +1,11 @@
+Program
+  FunDecl 'main' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:1>
+        VarDecl 'x' : int  <2:7>
+err_unary_minus.cm:3:7: error: C- has no unary minus; write '0 - x' instead
+    x = -1;
+        ^
+1 error generated.
+exit status: 1

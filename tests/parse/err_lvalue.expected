@@ -1,0 +1,23 @@
+Program
+  FunDecl 'main' -> void  <1:6>
+    (no parameters)
+    body:
+      CompoundStmt  <2:1>
+        VarDecl 'x' : int  <2:7>
+        VarDecl 'y' : int  <2:14>
+        ExprStmt  <3:3>
+          AssignExpr  <3:5>
+            VarExpr 'x'  <3:3>
+            NumExpr 1  <3:7>
+        ExprStmt  <3:10>
+          AssignExpr  <3:12>
+            VarExpr 'y'  <3:10>
+            NumExpr 1  <3:14>
+err_lvalue.cm:4:9: error: left operand of '=' must be a variable or an array element
+    x + y = 2;
+          ^
+err_lvalue.cm:5:7: error: left operand of '=' must be a variable or an array element
+    (x) = 3;
+        ^
+2 errors generated.
+exit status: 1

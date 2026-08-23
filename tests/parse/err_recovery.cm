@@ -1,0 +1,7 @@
+int a
+int b;
+void main(void)
+{ int c
+  c = 1;
+  output(c)
+}

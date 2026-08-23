@@ -1,0 +1,9 @@
+int g[10];
+int f(int a[], int n)
+{ int i;
+  i = 0;
+  while (i < n) { a[i] = a[i] + g[i]; i = i + 1; }
+  return a[0];
+}
+void main(void)
+{ output(f(g, 10)); }

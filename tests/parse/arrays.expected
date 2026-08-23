@@ -1,0 +1,51 @@
+Program
+  VarDecl 'g' : int[10]  <1:5>
+  FunDecl 'f' -> int  <2:5>
+    ParamDecl 'a' : int[]  <2:11>
+    ParamDecl 'n' : int  <2:20>
+    body:
+      CompoundStmt  <3:1>
+        VarDecl 'i' : int  <3:7>
+        ExprStmt  <4:3>
+          AssignExpr  <4:5>
+            VarExpr 'i'  <4:3>
+            NumExpr 0  <4:7>
+        WhileStmt  <5:3>
+          cond:
+            BinaryExpr '<'  <5:12>
+              VarExpr 'i'  <5:10>
+              VarExpr 'n'  <5:14>
+          body:
+            CompoundStmt  <5:17>
+              ExprStmt  <5:19>
+                AssignExpr  <5:24>
+                  VarExpr 'a'  <5:19>
+                    index:
+                      VarExpr 'i'  <5:21>
+                  BinaryExpr '+'  <5:31>
+                    VarExpr 'a'  <5:26>
+                      index:
+                        VarExpr 'i'  <5:28>
+                    VarExpr 'g'  <5:33>
+                      index:
+                        VarExpr 'i'  <5:35>
+              ExprStmt  <5:39>
+                AssignExpr  <5:41>
+                  VarExpr 'i'  <5:39>
+                  BinaryExpr '+'  <5:45>
+                    VarExpr 'i'  <5:43>
+                    NumExpr 1  <5:47>
+        ReturnStmt  <6:3>
+          VarExpr 'a'  <6:10>
+            index:
+              NumExpr 0  <6:12>
+  FunDecl 'main' -> void  <8:6>
+    (no parameters)
+    body:
+      CompoundStmt  <9:1>
+        ExprStmt  <9:3>
+          CallExpr 'output'  <9:3>
+            CallExpr 'f'  <9:10>
+              VarExpr 'g'  <9:12>
+              NumExpr 10  <9:15>
+exit status: 0
