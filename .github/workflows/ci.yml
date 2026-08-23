@@ -36,7 +36,12 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh "$LLVM_VERSION"
           sudo apt-get install -y --no-install-recommends \
-            "llvm-$LLVM_VERSION-dev" ninja-build zlib1g-dev libzstd-dev libxml2-dev
+            "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
+            ninja-build zlib1g-dev libzstd-dev libxml2-dev
+          # cmc looks for `ld.lld`, which is also the name the C driver goes
+          # looking for once it is told -fuse-ld=lld. Only the versioned name
+          # is reliably packaged, so make the plain one exist.
+          sudo ln -sf "/usr/lib/llvm-$LLVM_VERSION/bin/ld.lld" /usr/local/bin/ld.lld
 
       - name: Select the compiler
         run: |
@@ -60,6 +65,16 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # Falling back to the system linker would leave the lld path untested
+      # while the job still passed, so check the binary and not just the flag:
+      # lld records itself in .comment, the system linker does not.
+      - name: Check that lld really performs the link
+        run: |
+          set -euxo pipefail
+          ./build/cmc -v examples/gcd.cm -o /tmp/gcd 2>&1 | tee /tmp/link.txt
+          grep -q -- "-fuse-ld=lld" /tmp/link.txt
+          readelf -p .comment /tmp/gcd | grep -qi "LLD"
+
       # CC is the linker driver the end-to-end tests use to turn cmc's object
       # files into programs; it is independent of what built cmc itself.
       - name: Test
@@ -80,7 +95,12 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh "$LLVM_VERSION"
           sudo apt-get install -y --no-install-recommends \
-            "llvm-$LLVM_VERSION-dev" ninja-build zlib1g-dev libzstd-dev libxml2-dev
+            "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
+            ninja-build zlib1g-dev libzstd-dev libxml2-dev
+          # cmc looks for `ld.lld`, which is also the name the C driver goes
+          # looking for once it is told -fuse-ld=lld. Only the versioned name
+          # is reliably packaged, so make the plain one exist.
+          sudo ln -sf "/usr/lib/llvm-$LLVM_VERSION/bin/ld.lld" /usr/local/bin/ld.lld
 
       - name: Configure
         run: |

@@ -30,7 +30,12 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh "$LLVM_VERSION"
           sudo apt-get install -y --no-install-recommends \
-            "llvm-$LLVM_VERSION-dev" ninja-build zlib1g-dev libzstd-dev libxml2-dev
+            "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
+            ninja-build zlib1g-dev libzstd-dev libxml2-dev
+          # The tests below link with lld when it answers to `ld.lld`, which is
+          # the name the C driver goes looking for. Only the versioned name is
+          # reliably packaged, so make the plain one exist.
+          sudo ln -sf "/usr/lib/llvm-$LLVM_VERSION/bin/ld.lld" /usr/local/bin/ld.lld
 
       - name: Build
         run: |

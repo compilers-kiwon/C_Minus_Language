@@ -117,6 +117,21 @@ per architecture. A compiler can only skip the driver if it also ships a libc.
 So `cmc` invokes `cc` and, when `ld.lld` is installed, adds `-fuse-ld=lld` so
 that LLD does the actual linking.
 
+The probe is for `ld.lld` under exactly that name, because that is what the
+driver itself searches for once it is given `-fuse-ld=lld`; finding only a
+versioned `ld.lld-21` and passing the flag anyway would just make the driver
+fail. Whether LLD took part is visible in the binary rather than in the flag,
+since it records itself and the system linker does not:
+
+```
+$ readelf -p .comment ./gcd
+  [     1]  Linker: Ubuntu LLD 21.1.8
+  [    1b]  GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+```
+
+`--use-ld=bfd` forces the system linker instead. On Ubuntu, `apt install lld`
+is enough to switch the default over.
+
 The runtime archive is found without configuration: `$CMINUS_RUNTIME` first,
 then next to the compiler (the build tree), then `../lib` (an unpacked
 release).
