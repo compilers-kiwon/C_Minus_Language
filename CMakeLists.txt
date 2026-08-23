@@ -16,8 +16,10 @@ endif()
 
 add_executable(cmc
   src/main.cpp
+  src/AST.cpp
   src/Diagnostic.cpp
   src/Lexer.cpp
+  src/Parser.cpp
   src/Token.cpp
 )
 

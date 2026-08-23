@@ -1,12 +1,15 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "cminus/AST.h"
 #include "cminus/Diagnostic.h"
 #include "cminus/Lexer.h"
+#include "cminus/Parser.h"
 #include "cminus/Token.h"
 
 #if defined(_WIN32)
@@ -21,9 +24,16 @@
 
 namespace {
 
+/// The last stage the driver should run. Each --dump-* flag stops the pipeline
+/// right after the stage it prints, so a broken later stage cannot hide the
+/// output of an earlier one.
+enum class Stage { Scan, Parse, All };
+
 struct Options {
   std::string inputPath;
+  Stage stopAfter = Stage::All;
   bool dumpTokens = false;
+  bool dumpAST = false;
   bool useColor = true;
   bool colorForced = false;
 };
@@ -33,6 +43,7 @@ void printUsage(std::ostream &os, const char *argv0) {
      << "\n"
      << "Options:\n"
      << "  --dump-tokens   Print the token stream and stop\n"
+     << "  --dump-ast      Print the parse tree and stop\n"
      << "  --color         Force colored diagnostics\n"
      << "  --no-color      Disable colored diagnostics\n"
      << "  -h, --help      Show this message\n";
@@ -89,6 +100,11 @@ int main(int argc, char **argv) {
     }
     if (arg == "--dump-tokens") {
       opts.dumpTokens = true;
+      opts.stopAfter = Stage::Scan;
+    } else if (arg == "--dump-ast") {
+      opts.dumpAST = true;
+      if (opts.stopAfter != Stage::Scan)
+        opts.stopAfter = Stage::Parse;
     } else if (arg == "--color") {
       opts.useColor = true;
       opts.colorForced = true;
@@ -126,9 +142,20 @@ int main(int argc, char **argv) {
 
   // --- scan
   cminus::Lexer lexer(source, diags);
-  const std::vector<cminus::Token> tokens = lexer.tokenize();
+  std::vector<cminus::Token> tokens = lexer.tokenize();
   if (opts.dumpTokens)
     dumpTokens(tokens);
+  if (opts.stopAfter == Stage::Scan || diags.hasErrors())
+    return finish(diags, opts.useColor);
 
+  // --- parse
+  cminus::Parser parser(std::move(tokens), diags);
+  std::unique_ptr<cminus::Program> program = parser.parseProgram();
+  if (opts.dumpAST && program)
+    cminus::printAST(*program, std::cout);
+  if (opts.stopAfter == Stage::Parse || diags.hasErrors())
+    return finish(diags, opts.useColor);
+
+  // Semantic analysis and IR generation are not wired up yet.
   return finish(diags, opts.useColor);
 }
