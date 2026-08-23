@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch makes the running one pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The code generator needs the Triple-based LLVM 21 APIs, and Ubuntu 24.04
+  # only ships 18, so the toolchain comes from apt.llvm.org.
+  LLVM_VERSION: "21"
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          set -euxo pipefail
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+          sudo apt-get install -y --no-install-recommends \
+            "llvm-$LLVM_VERSION-dev" ninja-build zlib1g-dev libzstd-dev libxml2-dev
+
+      - name: Select the compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = gcc ]; then
+            echo "CMAKE_C_COMPILER=gcc"    >> "$GITHUB_ENV"
+            echo "CMAKE_CXX_COMPILER=g++"  >> "$GITHUB_ENV"
+          else
+            echo "CMAKE_C_COMPILER=clang-$LLVM_VERSION"    >> "$GITHUB_ENV"
+            echo "CMAKE_CXX_COMPILER=clang++-$LLVM_VERSION" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER="$CMAKE_C_COMPILER" \
+            -DCMAKE_CXX_COMPILER="$CMAKE_CXX_COMPILER" \
+            -DLLVM_DIR="/usr/lib/llvm-$LLVM_VERSION/lib/cmake/llvm" \
+            -DCMINUS_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # CC is the linker driver the end-to-end tests use to turn cmc's object
+      # files into programs; it is independent of what built cmc itself.
+      - name: Test
+        env:
+          CC: clang-${{ env.LLVM_VERSION }}
+        run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          set -euxo pipefail
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+          sudo apt-get install -y --no-install-recommends \
+            "llvm-$LLVM_VERSION-dev" ninja-build zlib1g-dev libzstd-dev libxml2-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER="clang-$LLVM_VERSION" \
+            -DCMAKE_CXX_COMPILER="clang++-$LLVM_VERSION" \
+            -DLLVM_DIR="/usr/lib/llvm-$LLVM_VERSION/lib/cmake/llvm" \
+            -DCMINUS_SANITIZERS=ON \
+            -DCMINUS_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        env:
+          CC: clang-${{ env.LLVM_VERSION }}
+        run: ctest --test-dir build --output-on-failure
