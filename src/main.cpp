@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -48,6 +49,7 @@ enum class OutputKind { Executable, Object, LLVMIR };
 struct Options {
   std::string inputPath;
   std::string outputPath; // empty means "pick a default"
+  std::string targetTriple; // empty means the host
   Stage stopAfter = Stage::Emit;
   OutputKind output = OutputKind::Executable;
   bool dumpTokens = false;
@@ -77,13 +79,19 @@ void printUsage(std::ostream &os, const char *argv0) {
      << "                    '-' means standard output)\n"
      << "  -O0 -O1 -O2 -O3   Optimization level (default -O0)\n"
      << "\n"
+     << "Cross compilation:\n"
+     << "  --target <triple> Generate code for <triple> instead of the host,\n"
+     << "                    e.g. aarch64-linux-gnu or riscv64-linux-gnu\n"
+     << "\n"
      << "Linking:\n"
-     << "  --cc <command>    C driver used to link (default $CMINUS_CC, else\n"
-     << "                    cc, clang or gcc)\n"
-     << "  --use-ld=<name>   Pass -fuse-ld=<name> to the driver; the default\n"
-     << "                    is lld when it is installed\n"
-     << "  --runtime <file>  Path to libcminus_rt.a (default $CMINUS_RUNTIME,\n"
-     << "                    else next to the compiler)\n"
+     << "  --cc <command>    C driver used to link. May carry arguments, as a\n"
+     << "                    cross toolchain needs its sysroot (default\n"
+     << "                    $CMINUS_CC, else cc, clang or gcc)\n"
+     << "  --use-ld=<name>   Pass -fuse-ld=<name> to the driver; lld is used\n"
+     << "                    by default when installed and --cc was not given\n"
+     << "  --runtime <file>  Path to libcminus_rt.a, which must be built for\n"
+     << "                    the target (default $CMINUS_RUNTIME, else next to\n"
+     << "                    the compiler)\n"
      << "  -save-temps       Keep the intermediate object file\n"
      << "  -v                Print the link command\n"
      << "\n"
@@ -107,6 +115,11 @@ bool readFile(const std::string &path, std::string &out) {
   buf << in.rdbuf();
   out = buf.str();
   return true;
+}
+
+bool environmentIsSet(const char *name) {
+  const char *value = std::getenv(name);
+  return value != nullptr && *value != '\0';
 }
 
 /// `dir/prog.cm` with extension `.o` becomes `dir/prog.o`.
@@ -147,9 +160,9 @@ int finish(const cminus::DiagnosticEngine &diags, bool useColor) {
 }
 
 /// Compile to an object file and hand it, plus the runtime, to the linker.
-bool buildExecutable(llvm::Module &module, const Options &opts,
-                     const char *argv0, const std::string &output,
-                     std::string &error) {
+bool buildExecutable(llvm::Module &module, const cminus::Target &target,
+                     const Options &opts, const char *argv0,
+                     const std::string &output, std::string &error) {
   // With -save-temps the object lands where -c would have put it; otherwise
   // it is a temporary that is removed once the link succeeds.
   std::string objectPath;
@@ -167,7 +180,7 @@ bool buildExecutable(llvm::Module &module, const Options &opts,
     temporary = true;
   }
 
-  if (!cminus::writeObjectFile(module, objectPath, error)) {
+  if (!target.writeObjectFile(module, objectPath, error)) {
     if (temporary)
       llvm::sys::fs::remove(objectPath);
     return false;
@@ -188,6 +201,30 @@ bool buildExecutable(llvm::Module &module, const Options &opts,
   if (temporary)
     llvm::sys::fs::remove(objectPath);
   return linked;
+}
+
+/// Linking for another machine needs a driver and a runtime built for it.
+/// The ones found automatically belong to the host and would fail with an
+/// object-format mismatch that explains nothing, so say so first.
+///
+/// `triple` is what the user asked for rather than LLVM's normalized form:
+/// toolchain packages are named after the former, so `aarch64-linux-gnu-gcc`
+/// exists while `aarch64-unknown-linux-gnu-gcc` does not.
+bool checkCrossLinkInputs(const Options &opts, const std::string &triple,
+                          std::string &error) {
+  if (opts.driver.empty() && !environmentIsSet("CMINUS_CC")) {
+    error = "linking for '" + triple +
+            "' needs a matching C driver; pass --cc \"" + triple +
+            "-gcc --sysroot=<path>\", or use -c and link separately";
+    return false;
+  }
+  if (opts.runtimePath.empty() && !environmentIsSet("CMINUS_RUNTIME")) {
+    error = "linking for '" + triple +
+            "' needs a runtime built for it; pass --runtime <path to "
+            "libcminus_rt.a>, or use -c and link separately";
+    return false;
+  }
+  return true;
 }
 
 } // namespace
@@ -216,7 +253,8 @@ int main(int argc, char **argv) {
       opts.output = OutputKind::LLVMIR;
     } else if (arg == "-c") {
       opts.output = OutputKind::Object;
-    } else if (arg == "-o" || arg == "--cc" || arg == "--runtime") {
+    } else if (arg == "-o" || arg == "--cc" || arg == "--runtime" ||
+               arg == "--target" || arg == "-target") {
       if (i + 1 >= argc) {
         std::cerr << "cmc: error: '" << arg << "' needs an argument\n";
         return 2;
@@ -226,8 +264,12 @@ int main(int argc, char **argv) {
         opts.outputPath = value;
       else if (arg == "--cc")
         opts.driver = value;
-      else
+      else if (arg == "--runtime")
         opts.runtimePath = value;
+      else
+        opts.targetTriple = value;
+    } else if (arg.rfind("--target=", 0) == 0) {
+      opts.targetTriple = arg.substr(std::string("--target=").size());
     } else if (arg.rfind("--use-ld=", 0) == 0) {
       opts.useLinker = arg.substr(std::string("--use-ld=").size());
       opts.haveUseLinker = true;
@@ -298,18 +340,36 @@ int main(int argc, char **argv) {
   if (opts.stopAfter == Stage::Analyze || diags.hasErrors())
     return finish(diags, opts.useColor);
 
+  // --- resolve the target first: the data layout has to be on the module
+  // before any IR is generated, because it decides how wide a pointer is.
+  std::string error;
+  std::unique_ptr<cminus::Target> target =
+      cminus::Target::create(opts.targetTriple, opts.optLevel, error);
+  if (!target) {
+    std::cerr << "cmc: error: " << error << '\n';
+    return 1;
+  }
+  const bool crossing = target->triple() != cminus::hostTriple();
+
+  if (opts.output == OutputKind::Executable && crossing &&
+      !checkCrossLinkInputs(opts, opts.targetTriple, error)) {
+    std::cerr << "cmc: error: " << error << '\n';
+    return 1;
+  }
+
   // --- generate
   llvm::LLVMContext context;
   cminus::IRGenOptions irOptions;
   irOptions.moduleName = opts.inputPath;
   irOptions.indexChecks = opts.indexChecks;
+  irOptions.targetTriple = target->triple();
+  irOptions.dataLayout = target->dataLayout();
 
   std::unique_ptr<llvm::Module> module =
       cminus::generateIR(*program, context, diags, irOptions);
   if (!module || diags.hasErrors())
     return finish(diags, opts.useColor);
 
-  std::string error;
   if (!cminus::optimizeModule(*module, opts.optLevel, error)) {
     std::cerr << "cmc: error: " << error << '\n';
     return 1;
@@ -331,10 +391,10 @@ int main(int argc, char **argv) {
     written = cminus::writeIR(*module, output, error);
     break;
   case OutputKind::Object:
-    written = cminus::writeObjectFile(*module, output, error);
+    written = target->writeObjectFile(*module, output, error);
     break;
   case OutputKind::Executable:
-    written = buildExecutable(*module, opts, argv[0], output, error);
+    written = buildExecutable(*module, *target, opts, argv[0], output, error);
     break;
   }
   if (!written) {

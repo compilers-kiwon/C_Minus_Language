@@ -16,6 +16,11 @@ class DiagnosticEngine;
 
 struct IRGenOptions {
   std::string moduleName = "cminus";
+  /// Triple and textual data layout of the target, from Target. Both are
+  /// stamped on the module before anything is generated: the data layout is
+  /// what says how wide a pointer is, and a getelementptr index has to match.
+  std::string targetTriple;
+  std::string dataLayout;
   /// Spec 3.6 makes a negative subscript a run-time error that stops the
   /// program. Turning this off leaves those checks out of the emitted IR,
   /// which makes it much easier to read.

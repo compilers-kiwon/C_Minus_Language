@@ -1,6 +1,7 @@
 #include "cminus/Link.h"
 
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "llvm/ADT/SmallString.h"
@@ -16,7 +17,7 @@ namespace {
 
 const char *const kRuntimeName = "libcminus_rt.a";
 
-/// Drivers to try when the user names none.
+/// Drivers to try when the caller names none.
 const char *const kDefaultDrivers[] = {"cc", "clang", "gcc"};
 
 std::string environmentValue(const char *name) {
@@ -28,6 +29,47 @@ bool isFile(const llvm::Twine &path) {
   return llvm::sys::fs::is_regular_file(path);
 }
 
+/// Split a driver command into words.
+///
+/// A build system hands the C driver over as a command line rather than a
+/// name -- a cross toolchain is useless without its sysroot, so
+/// `aarch64-linux-gnu-gcc --sysroot=/path -mcpu=cortex-a53` arrives as one
+/// string. Quotes are honoured so a path containing a space survives.
+std::vector<std::string> splitCommand(const std::string &command) {
+  std::vector<std::string> words;
+  std::string current;
+  bool inWord = false;
+  char quote = '\0';
+
+  for (const char c : command) {
+    if (quote != '\0') {
+      if (c == quote)
+        quote = '\0';
+      else
+        current += c;
+      continue;
+    }
+    if (c == '"' || c == '\'') {
+      quote = c;
+      inWord = true;
+      continue;
+    }
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+      if (inWord) {
+        words.push_back(current);
+        current.clear();
+        inWord = false;
+      }
+      continue;
+    }
+    current += c;
+    inWord = true;
+  }
+  if (inWord)
+    words.push_back(current);
+  return words;
+}
+
 } // namespace
 
 std::string findRuntime(const char *argv0, void *mainAddr) {
@@ -35,7 +77,8 @@ std::string findRuntime(const char *argv0, void *mainAddr) {
   if (!fromEnvironment.empty())
     return fromEnvironment;
 
-  const std::string executable = llvm::sys::fs::getMainExecutable(argv0, mainAddr);
+  const std::string executable =
+      llvm::sys::fs::getMainExecutable(argv0, mainAddr);
   if (executable.empty())
     return {};
 
@@ -59,34 +102,47 @@ std::string findRuntime(const char *argv0, void *mainAddr) {
 bool linkExecutable(const LinkOptions &options, std::string &error) {
   error.clear();
 
-  // Resolve the driver.
-  std::string driverPath;
-  std::string driverName = options.driver;
-  if (driverName.empty())
-    driverName = environmentValue("CMINUS_CC");
-
-  if (!driverName.empty()) {
-    if (auto found = llvm::sys::findProgramByName(driverName)) {
-      driverPath = *found;
-    } else {
-      error = "cannot find the C compiler driver '" + driverName + "'";
-      return false;
-    }
+  // A driver the caller named -- on the command line or in the environment --
+  // is taken at its word, arguments and all.
+  std::vector<std::string> driverWords;
+  bool namedByCaller = false;
+  if (!options.driver.empty()) {
+    driverWords = splitCommand(options.driver);
+    namedByCaller = true;
   } else {
+    const std::string fromEnvironment = environmentValue("CMINUS_CC");
+    if (!fromEnvironment.empty()) {
+      driverWords = splitCommand(fromEnvironment);
+      namedByCaller = true;
+    }
+  }
+
+  if (namedByCaller && driverWords.empty()) {
+    error = "the C compiler driver was given as an empty command";
+    return false;
+  }
+
+  if (driverWords.empty()) {
     for (const char *candidate : kDefaultDrivers) {
-      if (auto found = llvm::sys::findProgramByName(candidate)) {
-        driverName = candidate;
-        driverPath = *found;
+      if (llvm::sys::findProgramByName(candidate)) {
+        driverWords.emplace_back(candidate);
         break;
       }
     }
-    if (driverPath.empty()) {
+    if (driverWords.empty()) {
       error = "no C compiler driver found on PATH (looked for cc, clang and "
               "gcc); name one with --cc or $CMINUS_CC, or use -c and link "
               "separately";
       return false;
     }
   }
+
+  auto resolved = llvm::sys::findProgramByName(driverWords.front());
+  if (!resolved) {
+    error = "cannot find the C compiler driver '" + driverWords.front() + "'";
+    return false;
+  }
+  const std::string driverPath = *resolved;
 
   if (options.runtimePath.empty()) {
     error = "cannot find " + std::string(kRuntimeName) +
@@ -98,19 +154,21 @@ bool linkExecutable(const LinkOptions &options, std::string &error) {
     return false;
   }
 
-  // Prefer lld when it is installed: it is part of the same LLVM toolchain
-  // the rest of the compiler is built on. The driver still assembles the link
-  // line, because that is the part lld does not know how to do.
+  // Prefer lld when it is installed, since it is part of the same LLVM
+  // toolchain as the rest of the compiler. Not when the caller named the
+  // driver, though: a cross toolchain was chosen deliberately and injecting a
+  // linker into it would be presumptuous. --use-ld= overrides either way.
   std::string useLinkerFlag;
   if (options.haveUseLinker) {
     if (!options.useLinker.empty())
       useLinkerFlag = "-fuse-ld=" + options.useLinker;
-  } else if (llvm::sys::findProgramByName("ld.lld")) {
+  } else if (!namedByCaller && llvm::sys::findProgramByName("ld.lld")) {
     useLinkerFlag = "-fuse-ld=lld";
   }
 
   std::vector<llvm::StringRef> args;
-  args.push_back(driverName);
+  for (const std::string &word : driverWords)
+    args.push_back(word);
   if (!useLinkerFlag.empty())
     args.push_back(useLinkerFlag);
   args.push_back(options.objectPath);
@@ -138,7 +196,7 @@ bool linkExecutable(const LinkOptions &options, std::string &error) {
     return false;
   }
   if (status != 0) {
-    error = "'" + driverName + "' failed while linking (exit status " +
+    error = "'" + driverWords.front() + "' failed while linking (exit status " +
             std::to_string(status) + ")";
     return false;
   }

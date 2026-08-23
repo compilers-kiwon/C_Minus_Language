@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <system_error>
+#include <utility>
 
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
@@ -20,6 +21,105 @@
 #include "llvm/TargetParser/Triple.h"
 
 namespace cminus {
+
+namespace {
+
+llvm::CodeGenOptLevel codeGenLevel(unsigned level) {
+  switch (level) {
+  case 0:  return llvm::CodeGenOptLevel::None;
+  case 1:  return llvm::CodeGenOptLevel::Less;
+  case 2:  return llvm::CodeGenOptLevel::Default;
+  default: return llvm::CodeGenOptLevel::Aggressive;
+  }
+}
+
+/// Register every back end LLVM was built with, not just the host's, so that
+/// --target can name any of them.
+void initializeTargets() {
+  static const bool once = [] {
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmPrinters();
+    return true;
+  }();
+  (void)once;
+}
+
+} // namespace
+
+struct Target::Impl {
+  std::unique_ptr<llvm::TargetMachine> machine;
+  std::string triple;
+  std::string dataLayout;
+};
+
+Target::Target(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+Target::~Target() = default;
+
+const std::string &Target::triple() const { return impl_->triple; }
+const std::string &Target::dataLayout() const { return impl_->dataLayout; }
+
+std::unique_ptr<Target> Target::create(const std::string &requested,
+                                       unsigned optLevel, std::string &error) {
+  error.clear();
+  initializeTargets();
+
+  const llvm::Triple triple(requested.empty()
+                                ? llvm::sys::getDefaultTargetTriple()
+                                : llvm::Triple::normalize(requested));
+
+  std::string lookupError;
+  const llvm::Target *target =
+      llvm::TargetRegistry::lookupTarget(triple, lookupError);
+  if (!target) {
+    error = "no back end for target '" + triple.str() + "': " + lookupError;
+    return nullptr;
+  }
+
+  llvm::TargetOptions options;
+  // Position-independent code, which is what every mainstream toolchain links
+  // by default.
+  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
+      triple, "generic", "", options, llvm::Reloc::PIC_, std::nullopt,
+      codeGenLevel(optLevel)));
+  if (!machine) {
+    error = "cannot create a target machine for '" + triple.str() + "'";
+    return nullptr;
+  }
+
+  auto impl = std::make_unique<Impl>();
+  impl->triple = triple.str();
+  impl->dataLayout = machine->createDataLayout().getStringRepresentation();
+  impl->machine = std::move(machine);
+  return std::unique_ptr<Target>(new Target(std::move(impl)));
+}
+
+bool Target::writeObjectFile(llvm::Module &module, const std::string &path,
+                             std::string &error) const {
+  error.clear();
+
+  std::error_code code;
+  llvm::raw_fd_ostream out(path, code, llvm::sys::fs::OF_None);
+  if (code) {
+    error = "cannot write '" + path + "': " + code.message();
+    return false;
+  }
+
+  llvm::legacy::PassManager passes;
+  if (impl_->machine->addPassesToEmitFile(passes, out, nullptr,
+                                          llvm::CodeGenFileType::ObjectFile)) {
+    error = "the '" + impl_->triple + "' back end cannot emit an object file";
+    return false;
+  }
+  passes.run(module);
+  out.flush();
+  return true;
+}
+
+std::string hostTriple() {
+  return llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple());
+}
 
 bool optimizeModule(llvm::Module &module, unsigned level, std::string &error) {
   error.clear();
@@ -65,52 +165,6 @@ bool writeIR(llvm::Module &module, const std::string &path,
     return false;
   }
   module.print(out, nullptr);
-  return true;
-}
-
-bool writeObjectFile(llvm::Module &module, const std::string &path,
-                     std::string &error) {
-  error.clear();
-
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
-
-  const llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
-  std::string lookupError;
-  const llvm::Target *target =
-      llvm::TargetRegistry::lookupTarget(triple, lookupError);
-  if (!target) {
-    error = "no back end for " + triple.str() + ": " + lookupError;
-    return false;
-  }
-
-  llvm::TargetOptions options;
-  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-      triple, "generic", "", options, llvm::Reloc::PIC_));
-  if (!machine) {
-    error = "cannot create a target machine for " + triple.str();
-    return false;
-  }
-
-  // Only the object file is host-specific; textual IR is left portable.
-  module.setDataLayout(machine->createDataLayout());
-  module.setTargetTriple(triple);
-
-  std::error_code code;
-  llvm::raw_fd_ostream out(path, code, llvm::sys::fs::OF_None);
-  if (code) {
-    error = "cannot write '" + path + "': " + code.message();
-    return false;
-  }
-
-  llvm::legacy::PassManager passes;
-  if (machine->addPassesToEmitFile(passes, out, nullptr,
-                                   llvm::CodeGenFileType::ObjectFile)) {
-    error = "the target cannot emit an object file";
-    return false;
-  }
-  passes.run(module);
-  out.flush();
   return true;
 }
 

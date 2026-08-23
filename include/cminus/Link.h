@@ -10,7 +10,10 @@ struct LinkOptions {
   std::string outputPath;
   /// Archive holding input, output and the negative-subscript handler.
   std::string runtimePath;
-  /// C compiler driver to invoke. Empty means: $CMINUS_CC, else cc, clang, gcc.
+  /// C compiler driver to invoke. May carry arguments, because a cross
+  /// toolchain is unusable without its sysroot and build systems hand the
+  /// driver over as a command line. Empty means: $CMINUS_CC, else cc, clang,
+  /// gcc.
   std::string driver;
   /// Passed on as -fuse-ld=<name>. Empty means: use lld if it is installed.
   std::string useLinker;

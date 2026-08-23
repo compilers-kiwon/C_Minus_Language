@@ -35,8 +35,10 @@ endif()
 message(STATUS "Using LLVM ${LLVM_PACKAGE_VERSION} from ${LLVM_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 
+# Every back end LLVM was built with, not just the host's, so that --target
+# can name any of them. This is most of cmc's size.
 llvm_map_components_to_libnames(CMINUS_LLVM_LIBS
-  core support passes native nativecodegen)
+  core support passes ${LLVM_TARGETS_TO_BUILD})
 
 add_executable(cmc
   src/main.cpp
@@ -96,3 +98,7 @@ add_test(NAME execution
   COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
           CMINUS_RT=$<TARGET_FILE:cminus_rt>
           bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
+# Skips itself when no cross toolchain or emulator is installed.
+add_test(NAME cross
+  COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
+          bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cross_tests.sh)

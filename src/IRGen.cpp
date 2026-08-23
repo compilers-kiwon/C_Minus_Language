@@ -16,6 +16,7 @@
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 
 #include "cminus/AST.h"
 #include "cminus/Diagnostic.h"
@@ -39,9 +40,14 @@ public:
       : ctx_(context), diags_(diags), options_(options),
         module_(std::make_unique<llvm::Module>(options.moduleName, context)),
         builder_(context), i32Ty_(llvm::Type::getInt32Ty(context)),
-        i64Ty_(llvm::Type::getInt64Ty(context)),
         voidTy_(llvm::Type::getVoidTy(context)),
-        ptrTy_(llvm::PointerType::get(context, 0)) {}
+        ptrTy_(llvm::PointerType::get(context, 0)) {
+    // Before anything is generated: the pointer width comes from here.
+    if (!options.dataLayout.empty())
+      module_->setDataLayout(options.dataLayout);
+    if (!options.targetTriple.empty())
+      module_->setTargetTriple(llvm::Triple(options.targetTriple));
+  }
 
   std::unique_ptr<llvm::Module> run(const Program &program);
 
@@ -50,8 +56,13 @@ private:
   llvm::Constant *int32(long long value) const {
     return llvm::ConstantInt::get(i32Ty_, value, /*IsSigned=*/true);
   }
-  llvm::Constant *int64(long long value) const {
-    return llvm::ConstantInt::get(i64Ty_, value, /*IsSigned=*/true);
+  /// Integer type a getelementptr index must have on this target: 64 bits on
+  /// aarch64 or x86-64, 32 on armv7 or riscv32.
+  llvm::Type *indexTy() const {
+    return module_->getDataLayout().getIndexType(ptrTy_);
+  }
+  llvm::Constant *indexZero() const {
+    return llvm::ConstantInt::get(indexTy(), 0);
   }
   /// The current block still needs a terminator.
   bool blockOpen() const {
@@ -107,7 +118,6 @@ private:
   llvm::IRBuilder<> builder_;
 
   llvm::Type *i32Ty_;
-  llvm::Type *i64Ty_;
   llvm::Type *voidTy_;
   llvm::PointerType *ptrTy_;
 
@@ -410,7 +420,7 @@ llvm::Value *IRGenerator::arrayBase(const Symbol &symbol) {
 
   llvm::Type *arrayType =
       llvm::ArrayType::get(i32Ty_, static_cast<uint64_t>(symbol.arraySize));
-  return builder_.CreateGEP(arrayType, address, {int64(0), int64(0)},
+  return builder_.CreateGEP(arrayType, address, {indexZero(), indexZero()},
                             symbol.name + ".base");
 }
 
@@ -426,7 +436,8 @@ llvm::Value *IRGenerator::elementAddress(const VarExpr &expr) {
     return address;
 
   llvm::Value *index = checkIndex(emitExpr(*expr.index));
-  llvm::Value *wide = builder_.CreateSExt(index, i64Ty_, "idx");
+  // Subscripts are int; widen or narrow to whatever this target indexes with.
+  llvm::Value *wide = builder_.CreateSExtOrTrunc(index, indexTy(), "idx");
 
   // Plain GEP rather than inbounds: spec 3.6 leaves the upper bound
   // unchecked, and marking an out-of-range access inbounds would make it
@@ -439,7 +450,7 @@ llvm::Value *IRGenerator::elementAddress(const VarExpr &expr) {
 
   llvm::Type *arrayType =
       llvm::ArrayType::get(i32Ty_, static_cast<uint64_t>(symbol->arraySize));
-  return builder_.CreateGEP(arrayType, address, {int64(0), wide},
+  return builder_.CreateGEP(arrayType, address, {indexZero(), wide},
                             symbol->name + ".elem");
 }
 
