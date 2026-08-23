@@ -6,14 +6,17 @@
 #include <string>
 #include <vector>
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/FileSystem.h"
 
 #include "cminus/AST.h"
 #include "cminus/Diagnostic.h"
 #include "cminus/Emit.h"
 #include "cminus/IRGen.h"
 #include "cminus/Lexer.h"
+#include "cminus/Link.h"
 #include "cminus/Parser.h"
 #include "cminus/SemanticAnalyzer.h"
 #include "cminus/Token.h"
@@ -30,21 +33,34 @@
 
 namespace {
 
+/// A symbol that lives in this executable, so that LLVM can work out the path
+/// of the running binary and look for the runtime next to it.
+int mainExecutableAnchor = 0;
+
 /// The last stage the driver should run. Each --dump-* flag stops the
 /// pipeline right after the stage it prints, so a broken later stage cannot
 /// hide the output of an earlier one.
 enum class Stage { Scan, Parse, Analyze, Emit };
 
+/// What the compiler should leave behind.
+enum class OutputKind { Executable, Object, LLVMIR };
+
 struct Options {
   std::string inputPath;
   std::string outputPath; // empty means "pick a default"
   Stage stopAfter = Stage::Emit;
+  OutputKind output = OutputKind::Executable;
   bool dumpTokens = false;
   bool dumpAST = false;
   bool dumpSymbols = false;
-  bool emitObject = false;
   unsigned optLevel = 0;
   bool indexChecks = true;
+  bool saveTemps = false;
+  bool verbose = false;
+  std::string driver;
+  std::string useLinker;
+  bool haveUseLinker = false;
+  std::string runtimePath;
   bool useColor = true;
   bool colorForced = false;
 };
@@ -52,11 +68,24 @@ struct Options {
 void printUsage(std::ostream &os, const char *argv0) {
   os << "usage: " << argv0 << " [options] <file.cm>\n"
      << "\n"
+     << "By default the program is compiled and linked into an executable.\n"
+     << "\n"
      << "Output:\n"
-     << "  --emit-llvm       Write textual LLVM IR (the default)\n"
-     << "  -c                Write a native object file\n"
-     << "  -o <file>         Write to <file> ('-' means standard output)\n"
+     << "  -c                Compile only; write an object file\n"
+     << "  --emit-llvm       Write textual LLVM IR instead of linking\n"
+     << "  -o <file>         Output path (default a.out, or <input>.o with -c;\n"
+     << "                    '-' means standard output)\n"
      << "  -O0 -O1 -O2 -O3   Optimization level (default -O0)\n"
+     << "\n"
+     << "Linking:\n"
+     << "  --cc <command>    C driver used to link (default $CMINUS_CC, else\n"
+     << "                    cc, clang or gcc)\n"
+     << "  --use-ld=<name>   Pass -fuse-ld=<name> to the driver; the default\n"
+     << "                    is lld when it is installed\n"
+     << "  --runtime <file>  Path to libcminus_rt.a (default $CMINUS_RUNTIME,\n"
+     << "                    else next to the compiler)\n"
+     << "  -save-temps       Keep the intermediate object file\n"
+     << "  -v                Print the link command\n"
      << "\n"
      << "Stages:\n"
      << "  --dump-tokens     Print the token stream and stop\n"
@@ -117,6 +146,50 @@ int finish(const cminus::DiagnosticEngine &diags, bool useColor) {
   return diags.hasErrors() ? 1 : 0;
 }
 
+/// Compile to an object file and hand it, plus the runtime, to the linker.
+bool buildExecutable(llvm::Module &module, const Options &opts,
+                     const char *argv0, const std::string &output,
+                     std::string &error) {
+  // With -save-temps the object lands where -c would have put it; otherwise
+  // it is a temporary that is removed once the link succeeds.
+  std::string objectPath;
+  bool temporary = false;
+  if (opts.saveTemps) {
+    objectPath = replaceExtension(opts.inputPath, ".o");
+  } else {
+    llvm::SmallString<128> path;
+    if (std::error_code code =
+            llvm::sys::fs::createTemporaryFile("cmc", "o", path)) {
+      error = "cannot create a temporary object file: " + code.message();
+      return false;
+    }
+    objectPath = std::string(path);
+    temporary = true;
+  }
+
+  if (!cminus::writeObjectFile(module, objectPath, error)) {
+    if (temporary)
+      llvm::sys::fs::remove(objectPath);
+    return false;
+  }
+
+  cminus::LinkOptions link;
+  link.objectPath = objectPath;
+  link.outputPath = output;
+  link.runtimePath = opts.runtimePath.empty()
+                         ? cminus::findRuntime(argv0, &mainExecutableAnchor)
+                         : opts.runtimePath;
+  link.driver = opts.driver;
+  link.useLinker = opts.useLinker;
+  link.haveUseLinker = opts.haveUseLinker;
+  link.verbose = opts.verbose;
+
+  const bool linked = cminus::linkExecutable(link, error);
+  if (temporary)
+    llvm::sys::fs::remove(objectPath);
+  return linked;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -140,17 +213,30 @@ int main(int argc, char **argv) {
       if (opts.stopAfter == Stage::Emit)
         opts.stopAfter = Stage::Analyze;
     } else if (arg == "--emit-llvm") {
-      opts.emitObject = false;
+      opts.output = OutputKind::LLVMIR;
     } else if (arg == "-c") {
-      opts.emitObject = true;
-    } else if (arg == "-o") {
+      opts.output = OutputKind::Object;
+    } else if (arg == "-o" || arg == "--cc" || arg == "--runtime") {
       if (i + 1 >= argc) {
-        std::cerr << "cmc: error: '-o' needs a file name\n";
+        std::cerr << "cmc: error: '" << arg << "' needs an argument\n";
         return 2;
       }
-      opts.outputPath = argv[++i];
+      const std::string value = argv[++i];
+      if (arg == "-o")
+        opts.outputPath = value;
+      else if (arg == "--cc")
+        opts.driver = value;
+      else
+        opts.runtimePath = value;
+    } else if (arg.rfind("--use-ld=", 0) == 0) {
+      opts.useLinker = arg.substr(std::string("--use-ld=").size());
+      opts.haveUseLinker = true;
     } else if (arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3") {
       opts.optLevel = static_cast<unsigned>(arg[2] - '0');
+    } else if (arg == "-save-temps") {
+      opts.saveTemps = true;
+    } else if (arg == "-v") {
+      opts.verbose = true;
     } else if (arg == "-fno-index-check") {
       opts.indexChecks = false;
     } else if (arg == "--color") {
@@ -229,13 +315,28 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // --- write
   std::string output = opts.outputPath;
-  if (output.empty())
-    output = opts.emitObject ? replaceExtension(opts.inputPath, ".o") : "-";
+  if (output.empty()) {
+    switch (opts.output) {
+    case OutputKind::Executable: output = "a.out"; break;
+    case OutputKind::Object:     output = replaceExtension(opts.inputPath, ".o"); break;
+    case OutputKind::LLVMIR:     output = "-"; break;
+    }
+  }
 
-  const bool written = opts.emitObject
-                           ? cminus::writeObjectFile(*module, output, error)
-                           : cminus::writeIR(*module, output, error);
+  bool written = false;
+  switch (opts.output) {
+  case OutputKind::LLVMIR:
+    written = cminus::writeIR(*module, output, error);
+    break;
+  case OutputKind::Object:
+    written = cminus::writeObjectFile(*module, output, error);
+    break;
+  case OutputKind::Executable:
+    written = buildExecutable(*module, opts, argv[0], output, error);
+    break;
+  }
   if (!written) {
     std::cerr << "cmc: error: " << error << '\n';
     return 1;

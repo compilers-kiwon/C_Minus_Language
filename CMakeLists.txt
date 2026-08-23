@@ -45,6 +45,7 @@ add_executable(cmc
   src/Emit.cpp
   src/IRGen.cpp
   src/Lexer.cpp
+  src/Link.cpp
   src/Parser.cpp
   src/SemanticAnalyzer.cpp
   src/Symbol.cpp
