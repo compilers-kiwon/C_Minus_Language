@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (must already exist)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  LLVM_VERSION: "21"
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          set -euxo pipefail
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+          sudo apt-get install -y --no-install-recommends \
+            "llvm-$LLVM_VERSION-dev" ninja-build zlib1g-dev libzstd-dev libxml2-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="clang-$LLVM_VERSION" \
+            -DCMAKE_CXX_COMPILER="clang++-$LLVM_VERSION" \
+            -DLLVM_DIR="/usr/lib/llvm-$LLVM_VERSION/lib/cmake/llvm" \
+            -DCMINUS_WERROR=ON
+          cmake --build build
+
+      # A release that cannot compile the spec's own examples is not a release.
+      - name: Test
+        env:
+          CC: clang-${{ env.LLVM_VERSION }}
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        id: package
+        run: |
+          set -euxo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          NAME="cmc-${TAG}-linux-x86_64"
+
+          mkdir -p "dist/$NAME/bin" "dist/$NAME/lib"
+          cp build/cmc              "dist/$NAME/bin/"
+          cp build/libcminus_rt.a   "dist/$NAME/lib/"
+          cp -r runtime examples docs README.md "dist/$NAME/"
+          strip "dist/$NAME/bin/cmc"
+
+          tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
+          sha256sum "dist/$NAME.tar.gz" | tee "dist/$NAME.tar.gz.sha256"
+
+          echo "tag=$TAG"   >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.package.outputs.tag }}
+          NAME: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          A compiler for C-Minus (Louden, *Compiler Construction*, Appendix A).
+
+          ### Contents
+
+          - `bin/cmc` — the compiler
+          - `lib/libcminus_rt.a` — `input`, `output` and the negative-subscript
+            handler, to link into compiled programs
+          - `runtime/`, `examples/`, `docs/spec/`
+
+          ### Use
+
+          ```
+          bin/cmc -O2 -c prog.cm -o prog.o
+          cc prog.o lib/libcminus_rt.a -o prog
+          ```
+
+          `bin/cmc` with no output flag writes textual LLVM IR to standard
+          output. Built on Ubuntu 24.04 for x86-64; it needs a matching glibc
+          and libstdc++, but LLVM itself is linked in.
+          NOTES
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file notes.md \
+            "dist/$NAME.tar.gz" \
+            "dist/$NAME.tar.gz.sha256"
