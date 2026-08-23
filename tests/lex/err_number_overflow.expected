@@ -1,0 +1,7 @@
+   1:1    NUM        99999999999999999999999999  (= 0)
+   2:1    EOF
+err_number_overflow.cm:1:1: error: integer constant '99999999999999999999999999' is too large
+  99999999999999999999999999
+  ^
+1 error generated.
+exit status: 1

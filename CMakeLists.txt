@@ -28,3 +28,8 @@ if(MSVC)
 else()
   target_compile_options(cmc PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+enable_testing()
+add_test(NAME golden
+  COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
+          bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh)

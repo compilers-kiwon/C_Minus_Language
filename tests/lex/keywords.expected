@@ -1,0 +1,17 @@
+   1:1    INT        int
+   1:5    VOID       void
+   1:10   IF         if
+   1:13   ELSE       else
+   1:18   WHILE      while
+   1:24   RETURN     return
+   2:1    ID         Int
+   2:5    ID         VOID
+   2:10   ID         iff
+   2:14   ID         elsewhere
+   2:24   ID         whilex
+   2:31   ID         returns
+   3:1    ID         i
+   3:3    ID         x
+   3:5    ID         n
+   4:1    EOF
+exit status: 0

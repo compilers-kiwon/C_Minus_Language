@@ -1,0 +1,7 @@
+/* a comment */ int
+/* spanning
+   several
+   lines */ x
+int/*no space around*/y
+/** starts with two stars **/ z
+/* not /* nested */ w

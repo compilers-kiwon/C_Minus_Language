@@ -1,0 +1,8 @@
+   1:17   INT        int
+   4:13   ID         x
+   5:1    INT        int
+   5:23   ID         y
+   6:31   ID         z
+   7:21   ID         w
+   8:1    EOF
+exit status: 0

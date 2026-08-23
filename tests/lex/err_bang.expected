@@ -1,0 +1,12 @@
+   1:1    ID         a
+   1:3    ERROR      !
+   1:5    ID         b
+   2:1    ID         a
+   2:3    NEQ        !=
+   2:6    ID         b
+   3:1    EOF
+err_bang.cm:1:3: error: '!' is not an operator in C-; did you mean '!='?
+  a ! b
+    ^
+1 error generated.
+exit status: 1

@@ -1,0 +1,9 @@
+   1:1    INT        int
+   1:5    ID         a
+   1:6    SEMI       ;
+   4:1    EOF
+err_unterminated_comment.cm:2:1: error: unterminated comment
+  /* this comment never ends
+  ^
+1 error generated.
+exit status: 1

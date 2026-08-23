@@ -1,0 +1,36 @@
+   1:1    INT        int
+   1:5    ID         a
+   1:6    SEMI       ;
+   1:8    ERROR      @
+   1:10   INT        int
+   1:14   ID         b
+   1:15   SEMI       ;
+   2:1    ERROR      #
+   2:3    ERROR      &
+   2:5    ERROR      $
+   2:7    ERROR      ~
+   2:9    ERROR      ?
+   3:1    INT        int
+   3:5    ID         c
+   3:6    SEMI       ;
+   4:1    EOF
+err_badchar.cm:1:8: error: invalid character '@' in source file
+  int a; @ int b;
+         ^
+err_badchar.cm:2:1: error: invalid character '#' in source file
+  # & $ ~ ?
+  ^
+err_badchar.cm:2:3: error: invalid character '&' in source file
+  # & $ ~ ?
+    ^
+err_badchar.cm:2:5: error: invalid character '$' in source file
+  # & $ ~ ?
+      ^
+err_badchar.cm:2:7: error: invalid character '~' in source file
+  # & $ ~ ?
+        ^
+err_badchar.cm:2:9: error: invalid character '?' in source file
+  # & $ ~ ?
+          ^
+6 errors generated.
+exit status: 1
