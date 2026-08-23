@@ -20,6 +20,7 @@ LLVM back end.
 | Parser | Hand-written recursive descent — no bison |
 | Back end | LLVM IR, then LLVM's own code generator for object files |
 | Linking | A C driver (`cc`), told to use `lld` when it is installed |
+| Cross compilation | `--target <triple>`, for any back end LLVM was built with |
 
 The grammar is LALR(1) apart from the dangling-else ambiguity, so a generated
 parser would have worked; writing it by hand buys much better error messages
@@ -98,6 +99,34 @@ Other:
 ```
 
 Each `--dump-*` flag stops the pipeline right after the stage it prints.
+
+### Cross compilation
+
+```bash
+cmc --target aarch64-linux-gnu -c prog.cm -o prog.o
+```
+
+Any triple LLVM has a back end for works; `cmc` links every one of them in,
+which accounts for most of its size. The target is resolved before IR
+generation rather than at object-writing time, because the data layout decides
+how wide a pointer is and therefore what type a `getelementptr` index takes --
+`i64` on aarch64, `i32` on armv7.
+
+Linking as well as compiling needs two more things, and `cmc` says so up front
+rather than letting the linker fail with an object-format mismatch: a driver
+for the target, and a runtime built for it.
+
+```bash
+aarch64-linux-gnu-gcc -O2 -c runtime/cminus_rt.c -o rt.o
+aarch64-linux-gnu-ar rcs libcminus_rt-aarch64.a rt.o
+cmc --target aarch64-linux-gnu --cc aarch64-linux-gnu-gcc --runtime libcminus_rt-aarch64.a -O2 prog.cm -o prog
+qemu-aarch64 -L /usr/aarch64-linux-gnu ./prog
+```
+
+`--cc` takes a whole command rather than just a name, because a cross
+toolchain is unusable without its sysroot. When it is given, `cmc` leaves the
+command alone -- no `-fuse-ld=lld` gets added to a toolchain it knows nothing
+about.
 
 ### Why the link goes through a C driver
 
@@ -182,7 +211,17 @@ followed by a separate link, which keeps that path honest:
 CMC=build/cmc tests/run_exec_tests.sh
 ```
 
-`ctest --test-dir build` runs both.
+Cross suite. The same programs and the same expectations, built for another
+architecture and run under an emulator: what a C- program prints does not
+depend on the machine it runs on, so any difference is a code generation bug.
+It skips itself when no cross toolchain is installed.
+
+```bash
+CMC=build/cmc tests/run_cross_tests.sh
+CROSS_TARGET=riscv64-linux-gnu CROSS_EMU=qemu-riscv64 CMC=build/cmc tests/run_cross_tests.sh
+```
+
+`ctest --test-dir build` runs all three.
 
 ## Continuous integration
 
@@ -221,3 +260,4 @@ tests/exec/       end-to-end compile-link-run tests
 | AST + recursive-descent parser (spec §2) | done |
 | Symbol table + semantic analysis (spec §3) | done |
 | LLVM IR generation, optimization and object output | done |
+| Cross compilation to any LLVM back end | done |

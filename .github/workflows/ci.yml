@@ -37,7 +37,8 @@ jobs:
           sudo ./llvm.sh "$LLVM_VERSION"
           sudo apt-get install -y --no-install-recommends \
             "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
-            ninja-build zlib1g-dev libzstd-dev libxml2-dev
+            ninja-build zlib1g-dev libzstd-dev libxml2-dev \
+            gcc-aarch64-linux-gnu qemu-user
           # cmc looks for `ld.lld`, which is also the name the C driver goes
           # looking for once it is told -fuse-ld=lld. Only the versioned name
           # is reliably packaged, so make the plain one exist.
@@ -96,7 +97,8 @@ jobs:
           sudo ./llvm.sh "$LLVM_VERSION"
           sudo apt-get install -y --no-install-recommends \
             "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
-            ninja-build zlib1g-dev libzstd-dev libxml2-dev
+            ninja-build zlib1g-dev libzstd-dev libxml2-dev \
+            gcc-aarch64-linux-gnu qemu-user
           # cmc looks for `ld.lld`, which is also the name the C driver goes
           # looking for once it is told -fuse-ld=lld. Only the versioned name
           # is reliably packaged, so make the plain one exist.
