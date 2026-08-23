@@ -1,0 +1,5 @@
+/* C- has no prototypes, so a name must be declared before it is used
+   (spec 3.1). Mutual recursion is therefore impossible. */
+int f(void) { return g(); }
+int g(void) { return 1; }
+void main(void) { output(f()); }

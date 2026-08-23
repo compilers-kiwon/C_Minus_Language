@@ -1,0 +1,8 @@
+int arr[5];
+int sum(int a[], int n) { return n; }
+int scalar(int x) { return x; }
+void main(void)
+{ output(sum(3, 5));
+  output(scalar(arr));
+  output(sum(arr, 5));
+}

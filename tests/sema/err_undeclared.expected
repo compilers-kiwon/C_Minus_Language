@@ -1,0 +1,18 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  main       function   void (void)      <1:6>
+
+scope 1  depth 1  function 'main'
+  x          variable   int              <2:7>
+err_undeclared.cm:3:7: error: use of undeclared identifier 'y'
+    x = y;
+        ^
+err_undeclared.cm:4:7: error: call to undeclared function 'z'
+    x = z();
+        ^
+err_undeclared.cm:5:7: error: use of undeclared identifier 'w'
+    x = w[0];
+        ^
+3 errors generated.
+exit status: 1

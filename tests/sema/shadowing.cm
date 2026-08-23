@@ -1,0 +1,12 @@
+/* A local may hide a global of the same name (spec 3.4). */
+int x[10];
+int f(int x)
+{ int y;
+  y = x;
+  return y;
+}
+void main(void)
+{ int x;
+  x = f(3);
+  output(x);
+}

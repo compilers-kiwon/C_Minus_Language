@@ -1,0 +1,29 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  a          variable   int[5]           <1:5>
+  b          variable   int[5]           <2:5>
+  main       function   void (void)      <3:6>
+
+scope 1  depth 1  function 'main'
+  x          variable   int              <4:7>
+err_array_use.cm:5:7: error: 'a' is an array and cannot be used as the value of an assignment; index it to get an element
+    x = a;
+        ^
+err_array_use.cm:6:7: error: 'a' is an array and cannot be used in arithmetic; index it to get an element
+    x = a + 1;
+        ^
+err_array_use.cm:7:3: error: cannot assign to array 'a' as a whole; assign to an element
+    a = b;
+    ^
+err_array_use.cm:7:7: error: 'b' is an array and cannot be used as the value of an assignment; index it to get an element
+    a = b;
+        ^
+err_array_use.cm:8:9: error: 'b' is an array and cannot be used as an array subscript; index it to get an element
+    x = a[b];
+          ^
+err_array_use.cm:9:7: error: 'a' is an array and cannot be used as a condition; index it to get an element
+    if (a) x = 1;
+        ^
+6 errors generated.
+exit status: 1

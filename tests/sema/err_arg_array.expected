@@ -1,0 +1,25 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  arr        variable   int[5]           <1:5>
+  sum        function   int (int[], int) <2:5>
+  scalar     function   int (int)        <3:5>
+  main       function   void (void)      <4:6>
+
+scope 1  depth 1  function 'sum'
+  a          parameter  int[]            <2:13>
+  n          parameter  int              <2:22>
+
+scope 2  depth 1  function 'scalar'
+  x          parameter  int              <3:16>
+
+scope 3  depth 1  function 'main'
+  (empty)
+err_arg_array.cm:5:14: error: argument 1 of 'sum' must be an array variable, but this expression is not an array
+  { output(sum(3, 5));
+               ^
+err_arg_array.cm:6:17: error: 'arr' is an array and cannot be used as argument 1 of 'scalar'; index it to get an element
+    output(scalar(arr));
+                  ^
+2 errors generated.
+exit status: 1

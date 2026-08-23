@@ -1,0 +1,41 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  x          variable   int[10]          <3:5>
+  minloc     function   int (int[], int, int) <4:5>
+  sort       function   void (int[], int, int) <17:6>
+  main       function   void (void)      <29:6>
+
+scope 1  depth 1  function 'minloc'
+  a          parameter  int[]            <4:18>
+  low        parameter  int              <4:27>
+  high       parameter  int              <4:36>
+  i          variable   int              <5:7>
+  x          variable   int              <5:14>
+  k          variable   int              <5:21>
+
+scope 2  depth 2  block
+  (empty)
+
+scope 3  depth 3  block
+  (empty)
+
+scope 4  depth 1  function 'sort'
+  a          parameter  int[]            <17:16>
+  low        parameter  int              <17:25>
+  high       parameter  int              <17:34>
+  i          variable   int              <18:7>
+  k          variable   int              <18:14>
+
+scope 5  depth 2  block
+  t          variable   int              <21:11>
+
+scope 6  depth 1  function 'main'
+  i          variable   int              <30:7>
+
+scope 7  depth 2  block
+  (empty)
+
+scope 8  depth 2  block
+  (empty)
+exit status: 0

@@ -1,0 +1,9 @@
+int a;
+int a;
+int f(int p)
+{ int p;
+  int q; int q;
+  return p;
+}
+void main(void)
+{ output(f(1)); }

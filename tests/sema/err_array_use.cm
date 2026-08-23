@@ -1,0 +1,10 @@
+int a[5];
+int b[5];
+void main(void)
+{ int x;
+  x = a;
+  x = a + 1;
+  a = b;
+  x = a[b];
+  if (a) x = 1;
+}

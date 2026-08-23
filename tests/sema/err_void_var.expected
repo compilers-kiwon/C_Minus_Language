@@ -1,0 +1,24 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  a          variable   int              <1:6>
+  f          function   int (int, int)   <2:5>
+  main       function   void (void)      <4:6>
+
+scope 1  depth 1  function 'f'
+  x          parameter  int              <2:12>
+  y          parameter  int              <2:19>
+
+scope 2  depth 1  function 'main'
+  b          variable   int              <5:8>
+err_void_var.cm:1:1: error: variable 'a' declared void
+  void a;
+  ^
+err_void_var.cm:2:7: error: parameter 'x' declared void
+  int f(void x, int y)
+        ^
+err_void_var.cm:5:3: error: variable 'b' declared void
+  { void b;
+    ^
+3 errors generated.
+exit status: 1

@@ -1,0 +1,5 @@
+int f(void) { output(1); }
+int g(int x) { if (x) return 1; }
+void main(void)
+{ output(f());
+  output(g(1)); }

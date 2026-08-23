@@ -6,6 +6,7 @@
 #
 #   tests/lex/<name>.cm    ->  cmc --dump-tokens
 #   tests/parse/<name>.cm  ->  cmc --dump-ast
+#   tests/sema/<name>.cm   ->  cmc --dump-symbols
 #
 # The combined stdout+stderr and the exit status are compared against
 # <name>.expected.
@@ -83,6 +84,7 @@ run_suite() {
 
 run_suite lex   --dump-tokens
 run_suite parse --dump-ast
+run_suite sema  --dump-symbols
 
 (( update )) && exit 0
 

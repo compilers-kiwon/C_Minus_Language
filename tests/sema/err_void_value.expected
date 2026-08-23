@@ -1,0 +1,36 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  p          function   void (int)       <1:6>
+  q          function   int (void)       <2:5>
+  r          function   void (void)      <3:6>
+  main       function   void (void)      <4:6>
+
+scope 1  depth 1  function 'p'
+  x          parameter  int              <1:12>
+
+scope 2  depth 1  function 'q'
+  (empty)
+
+scope 3  depth 1  function 'r'
+  (empty)
+
+scope 4  depth 1  function 'main'
+  x          variable   int              <5:7>
+err_void_value.cm:2:15: error: 'return' with no value in function 'q', which returns int
+  int q(void) { return; }
+                ^
+err_void_value.cm:3:16: error: 'return' with a value in function 'r', which returns void
+  void r(void) { return 1; }
+                 ^
+err_void_value.cm:6:7: error: the result of 'p' has type void and cannot be used as the value of an assignment
+    x = p(1);
+        ^
+err_void_value.cm:7:7: error: the result of 'p' has type void and cannot be used as a condition
+    if (p(2)) x = 1;
+        ^
+err_void_value.cm:8:10: error: the result of 'p' has type void and cannot be used as a condition
+    while (p(3)) x = 2;
+           ^
+5 errors generated.
+exit status: 1

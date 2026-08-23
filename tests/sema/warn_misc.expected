@@ -1,0 +1,20 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  a          variable   int[3]           <1:5>
+  z          variable   int[0]           <2:5>
+  main       function   void (void)      <3:6>
+
+scope 1  depth 1  function 'main'
+  x          variable   int              <4:7>
+warn_misc.cm:2:5: warning: array 'z' has size 0 and cannot be indexed
+  int z[0];
+      ^
+warn_misc.cm:5:9: warning: index 5 is past the end of 'a', which has 3 elements
+    x = a[5];
+          ^
+warn_misc.cm:6:9: warning: division by zero
+    x = x / 0;
+          ^
+3 warnings generated.
+exit status: 0

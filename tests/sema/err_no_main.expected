@@ -1,0 +1,12 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  f          function   int (void)       <1:5>
+
+scope 1  depth 1  function 'f'
+  (empty)
+err_no_main.cm:1:5: error: the last declaration of a C- program must be 'void main(void)'
+  int f(void) { return 0; }
+      ^
+1 error generated.
+exit status: 1

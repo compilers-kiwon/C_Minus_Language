@@ -1,0 +1,23 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  a          variable   int              <1:5>
+  f          function   int (void)       <2:5>
+  main       function   void (void)      <3:6>
+
+scope 1  depth 1  function 'f'
+  (empty)
+
+scope 2  depth 1  function 'main'
+  x          variable   int              <4:7>
+err_not_callable.cm:5:7: error: 'a' is a variable, not a function
+    x = a();
+        ^
+err_not_callable.cm:1:5: note: 'a' declared here
+  int a;
+      ^
+err_not_callable.cm:6:7: error: 'f' is a function; call it as 'f(...)'
+    x = f;
+        ^
+2 errors generated.
+exit status: 1

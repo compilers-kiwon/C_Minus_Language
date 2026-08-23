@@ -1,0 +1,9 @@
+void p(int x) { output(x); }
+int q(void) { return; }
+void r(void) { return 1; }
+void main(void)
+{ int x;
+  x = p(1);
+  if (p(2)) x = 1;
+  while (p(3)) x = 2;
+}

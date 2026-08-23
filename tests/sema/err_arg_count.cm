@@ -1,0 +1,6 @@
+int g(int u, int v) { return u + v; }
+void main(void)
+{ output(g(1));
+  output(g(1, 2, 3));
+  output(input(5));
+}

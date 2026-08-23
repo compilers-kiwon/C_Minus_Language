@@ -1,0 +1,15 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  main       function   void (void)      <2:6>
+
+scope 1  depth 1  function 'input'
+  (empty)
+
+scope 2  depth 1  function 'main'
+  (empty)
+err_builtin_redecl.cm:1:5: error: 'input' redeclares a built-in function of the same name
+  int input(void) { return 0; }
+      ^
+1 error generated.
+exit status: 1

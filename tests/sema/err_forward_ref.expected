@@ -1,0 +1,20 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  f          function   int (void)       <3:5>
+  g          function   int (void)       <4:5>
+  main       function   void (void)      <5:6>
+
+scope 1  depth 1  function 'f'
+  (empty)
+
+scope 2  depth 1  function 'g'
+  (empty)
+
+scope 3  depth 1  function 'main'
+  (empty)
+err_forward_ref.cm:3:22: error: call to undeclared function 'g'
+  int f(void) { return g(); }
+                       ^
+1 error generated.
+exit status: 1

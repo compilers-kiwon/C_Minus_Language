@@ -1,0 +1,29 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  g          function   int (int, int)   <1:5>
+  main       function   void (void)      <2:6>
+
+scope 1  depth 1  function 'g'
+  u          parameter  int              <1:11>
+  v          parameter  int              <1:18>
+
+scope 2  depth 1  function 'main'
+  (empty)
+err_arg_count.cm:3:10: error: 'g' takes 2 arguments but 1 was given
+  { output(g(1));
+           ^
+err_arg_count.cm:1:5: note: 'g' declared here
+  int g(int u, int v) { return u + v; }
+      ^
+err_arg_count.cm:4:10: error: 'g' takes 2 arguments but 3 were given
+    output(g(1, 2, 3));
+           ^
+err_arg_count.cm:1:5: note: 'g' declared here
+  int g(int u, int v) { return u + v; }
+      ^
+err_arg_count.cm:5:10: error: 'input' takes 0 arguments but 1 was given
+    output(input(5));
+           ^
+3 errors generated.
+exit status: 1

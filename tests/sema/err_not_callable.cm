@@ -1,0 +1,8 @@
+int a;
+int f(void) { return 0; }
+void main(void)
+{ int x;
+  x = a();
+  x = f;
+  output(x);
+}

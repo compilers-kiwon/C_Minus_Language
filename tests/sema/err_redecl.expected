@@ -1,0 +1,33 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  a          variable   int              <1:5>
+  f          function   int (int)        <3:5>
+  main       function   void (void)      <8:6>
+
+scope 1  depth 1  function 'f'
+  p          parameter  int              <3:11>
+  q          variable   int              <5:7>
+
+scope 2  depth 1  function 'main'
+  (empty)
+err_redecl.cm:2:5: error: redeclaration of 'a'
+  int a;
+      ^
+err_redecl.cm:1:5: note: previous declaration of 'a' is here
+  int a;
+      ^
+err_redecl.cm:4:7: error: redeclaration of 'p'
+  { int p;
+        ^
+err_redecl.cm:3:11: note: previous declaration of 'p' is here
+  int f(int p)
+            ^
+err_redecl.cm:5:14: error: redeclaration of 'q'
+    int q; int q;
+               ^
+err_redecl.cm:5:7: note: previous declaration of 'q' is here
+    int q; int q;
+        ^
+3 errors generated.
+exit status: 1

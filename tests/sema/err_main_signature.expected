@@ -1,0 +1,12 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  main       function   int (int)        <1:5>
+
+scope 1  depth 1  function 'main'
+  x          parameter  int              <1:14>
+err_main_signature.cm:1:5: error: 'main' must be declared as 'void main(void)'
+  int main(int x) { return x; }
+      ^
+1 error generated.
+exit status: 1

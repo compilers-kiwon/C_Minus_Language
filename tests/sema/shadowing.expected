@@ -1,0 +1,14 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  x          variable   int[10]          <2:5>
+  f          function   int (int)        <3:5>
+  main       function   void (void)      <8:6>
+
+scope 1  depth 1  function 'f'
+  x          parameter  int              <3:11>
+  y          variable   int              <4:7>
+
+scope 2  depth 1  function 'main'
+  x          variable   int              <9:7>
+exit status: 0

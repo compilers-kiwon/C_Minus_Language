@@ -1,0 +1,23 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  f          function   int (void)       <1:5>
+  g          function   int (int)        <2:5>
+  main       function   void (void)      <3:6>
+
+scope 1  depth 1  function 'f'
+  (empty)
+
+scope 2  depth 1  function 'g'
+  x          parameter  int              <2:11>
+
+scope 3  depth 1  function 'main'
+  (empty)
+err_return.cm:1:5: warning: control may reach the end of non-void function 'f' without returning a value
+  int f(void) { output(1); }
+      ^
+err_return.cm:2:5: warning: control may reach the end of non-void function 'g' without returning a value
+  int g(int x) { if (x) return 1; }
+      ^
+2 warnings generated.
+exit status: 0

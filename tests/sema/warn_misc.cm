@@ -1,0 +1,8 @@
+int a[3];
+int z[0];
+void main(void)
+{ int x;
+  x = a[5];
+  x = x / 0;
+  output(x);
+}

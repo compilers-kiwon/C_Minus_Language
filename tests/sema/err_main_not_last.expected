@@ -1,0 +1,16 @@
+scope 0  depth 0  global
+  input      function   int (void)       <built-in>
+  output     function   void (int)       <built-in>
+  main       function   void (void)      <1:6>
+  f          function   int (void)       <2:5>
+
+scope 1  depth 1  function 'main'
+  (empty)
+
+scope 2  depth 1  function 'f'
+  (empty)
+err_main_not_last.cm:1:6: error: 'main' must be the last declaration in the program
+  void main(void) { output(0); }
+       ^
+1 error generated.
+exit status: 1

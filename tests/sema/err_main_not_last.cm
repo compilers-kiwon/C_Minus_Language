@@ -1,0 +1,2 @@
+void main(void) { output(0); }
+int f(void) { return 0; }
