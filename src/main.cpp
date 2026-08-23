@@ -6,8 +6,13 @@
 #include <string>
 #include <vector>
 
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+
 #include "cminus/AST.h"
 #include "cminus/Diagnostic.h"
+#include "cminus/Emit.h"
+#include "cminus/IRGen.h"
 #include "cminus/Lexer.h"
 #include "cminus/Parser.h"
 #include "cminus/SemanticAnalyzer.h"
@@ -25,17 +30,21 @@
 
 namespace {
 
-/// The last stage the driver should run. Each --dump-* flag stops the pipeline
-/// right after the stage it prints, so a broken later stage cannot hide the
-/// output of an earlier one.
-enum class Stage { Scan, Parse, Analyze, All };
+/// The last stage the driver should run. Each --dump-* flag stops the
+/// pipeline right after the stage it prints, so a broken later stage cannot
+/// hide the output of an earlier one.
+enum class Stage { Scan, Parse, Analyze, Emit };
 
 struct Options {
   std::string inputPath;
-  Stage stopAfter = Stage::All;
+  std::string outputPath; // empty means "pick a default"
+  Stage stopAfter = Stage::Emit;
   bool dumpTokens = false;
   bool dumpAST = false;
   bool dumpSymbols = false;
+  bool emitObject = false;
+  unsigned optLevel = 0;
+  bool indexChecks = true;
   bool useColor = true;
   bool colorForced = false;
 };
@@ -43,12 +52,22 @@ struct Options {
 void printUsage(std::ostream &os, const char *argv0) {
   os << "usage: " << argv0 << " [options] <file.cm>\n"
      << "\n"
-     << "Options:\n"
-     << "  --dump-tokens   Print the token stream and stop\n"
-     << "  --dump-ast      Print the parse tree and stop\n"
-     << "  --color         Force colored diagnostics\n"
-     << "  --no-color      Disable colored diagnostics\n"
-     << "  -h, --help      Show this message\n";
+     << "Output:\n"
+     << "  --emit-llvm       Write textual LLVM IR (the default)\n"
+     << "  -c                Write a native object file\n"
+     << "  -o <file>         Write to <file> ('-' means standard output)\n"
+     << "  -O0 -O1 -O2 -O3   Optimization level (default -O0)\n"
+     << "\n"
+     << "Stages:\n"
+     << "  --dump-tokens     Print the token stream and stop\n"
+     << "  --dump-ast        Print the parse tree and stop\n"
+     << "  --dump-symbols    Print the symbol table and stop\n"
+     << "\n"
+     << "Other:\n"
+     << "  -fno-index-check  Omit the negative-subscript checks\n"
+     << "  --color           Force colored diagnostics\n"
+     << "  --no-color        Disable colored diagnostics\n"
+     << "  -h, --help        Show this message\n";
 }
 
 bool readFile(const std::string &path, std::string &out) {
@@ -59,6 +78,15 @@ bool readFile(const std::string &path, std::string &out) {
   buf << in.rdbuf();
   out = buf.str();
   return true;
+}
+
+/// `dir/prog.cm` with extension `.o` becomes `dir/prog.o`.
+std::string replaceExtension(const std::string &path, const char *extension) {
+  const std::size_t slash = path.find_last_of("/\\");
+  const std::size_t dot = path.find_last_of('.');
+  const bool hasExtension =
+      dot != std::string::npos && (slash == std::string::npos || dot > slash);
+  return (hasExtension ? path.substr(0, dot) : path) + extension;
 }
 
 void dumpTokens(const std::vector<cminus::Token> &tokens) {
@@ -109,8 +137,22 @@ int main(int argc, char **argv) {
         opts.stopAfter = Stage::Parse;
     } else if (arg == "--dump-symbols") {
       opts.dumpSymbols = true;
-      if (opts.stopAfter == Stage::All)
+      if (opts.stopAfter == Stage::Emit)
         opts.stopAfter = Stage::Analyze;
+    } else if (arg == "--emit-llvm") {
+      opts.emitObject = false;
+    } else if (arg == "-c") {
+      opts.emitObject = true;
+    } else if (arg == "-o") {
+      if (i + 1 >= argc) {
+        std::cerr << "cmc: error: '-o' needs a file name\n";
+        return 2;
+      }
+      opts.outputPath = argv[++i];
+    } else if (arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3") {
+      opts.optLevel = static_cast<unsigned>(arg[2] - '0');
+    } else if (arg == "-fno-index-check") {
+      opts.indexChecks = false;
     } else if (arg == "--color") {
       opts.useColor = true;
       opts.colorForced = true;
@@ -159,7 +201,7 @@ int main(int argc, char **argv) {
   std::unique_ptr<cminus::Program> program = parser.parseProgram();
   if (opts.dumpAST && program)
     cminus::printAST(*program, std::cout);
-  if (opts.stopAfter == Stage::Parse || diags.hasErrors())
+  if (opts.stopAfter == Stage::Parse || diags.hasErrors() || !program)
     return finish(diags, opts.useColor);
 
   // --- analyze
@@ -170,6 +212,34 @@ int main(int argc, char **argv) {
   if (opts.stopAfter == Stage::Analyze || diags.hasErrors())
     return finish(diags, opts.useColor);
 
-  // IR generation is not wired up yet.
+  // --- generate
+  llvm::LLVMContext context;
+  cminus::IRGenOptions irOptions;
+  irOptions.moduleName = opts.inputPath;
+  irOptions.indexChecks = opts.indexChecks;
+
+  std::unique_ptr<llvm::Module> module =
+      cminus::generateIR(*program, context, diags, irOptions);
+  if (!module || diags.hasErrors())
+    return finish(diags, opts.useColor);
+
+  std::string error;
+  if (!cminus::optimizeModule(*module, opts.optLevel, error)) {
+    std::cerr << "cmc: error: " << error << '\n';
+    return 1;
+  }
+
+  std::string output = opts.outputPath;
+  if (output.empty())
+    output = opts.emitObject ? replaceExtension(opts.inputPath, ".o") : "-";
+
+  const bool written = opts.emitObject
+                           ? cminus::writeObjectFile(*module, output, error)
+                           : cminus::writeIR(*module, output, error);
+  if (!written) {
+    std::cerr << "cmc: error: " << error << '\n';
+    return 1;
+  }
+
   return finish(diags, opts.useColor);
 }
