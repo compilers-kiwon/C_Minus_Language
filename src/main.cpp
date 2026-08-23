@@ -10,6 +10,7 @@
 #include "cminus/Diagnostic.h"
 #include "cminus/Lexer.h"
 #include "cminus/Parser.h"
+#include "cminus/SemanticAnalyzer.h"
 #include "cminus/Token.h"
 
 #if defined(_WIN32)
@@ -27,13 +28,14 @@ namespace {
 /// The last stage the driver should run. Each --dump-* flag stops the pipeline
 /// right after the stage it prints, so a broken later stage cannot hide the
 /// output of an earlier one.
-enum class Stage { Scan, Parse, All };
+enum class Stage { Scan, Parse, Analyze, All };
 
 struct Options {
   std::string inputPath;
   Stage stopAfter = Stage::All;
   bool dumpTokens = false;
   bool dumpAST = false;
+  bool dumpSymbols = false;
   bool useColor = true;
   bool colorForced = false;
 };
@@ -105,6 +107,10 @@ int main(int argc, char **argv) {
       opts.dumpAST = true;
       if (opts.stopAfter != Stage::Scan)
         opts.stopAfter = Stage::Parse;
+    } else if (arg == "--dump-symbols") {
+      opts.dumpSymbols = true;
+      if (opts.stopAfter == Stage::All)
+        opts.stopAfter = Stage::Analyze;
     } else if (arg == "--color") {
       opts.useColor = true;
       opts.colorForced = true;
@@ -156,6 +162,14 @@ int main(int argc, char **argv) {
   if (opts.stopAfter == Stage::Parse || diags.hasErrors())
     return finish(diags, opts.useColor);
 
-  // Semantic analysis and IR generation are not wired up yet.
+  // --- analyze
+  cminus::SemanticAnalyzer sema(diags);
+  sema.analyze(*program);
+  if (opts.dumpSymbols)
+    sema.printSymbols(std::cout);
+  if (opts.stopAfter == Stage::Analyze || diags.hasErrors())
+    return finish(diags, opts.useColor);
+
+  // IR generation is not wired up yet.
   return finish(diags, opts.useColor);
 }

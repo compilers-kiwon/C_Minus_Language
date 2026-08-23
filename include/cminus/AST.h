@@ -17,6 +17,8 @@ enum class Type { Int, Void, IntArray };
 
 const char *typeName(Type type);
 
+struct Symbol;
+
 enum class NodeKind {
   // Declarations.
   VarDecl,
@@ -54,6 +56,8 @@ struct Decl : Node {
   /// Location of the type-specifier, so "variable declared void" can point at
   /// the word `void` rather than at the name.
   SourceLocation typeLoc;
+  /// Filled in by semantic analysis.
+  const Symbol *symbol = nullptr;
 
   Decl(NodeKind k, SourceLocation l, std::string n, SourceLocation tl)
       : Node(k, l), name(std::move(n)), typeLoc(tl) {}
@@ -175,6 +179,8 @@ struct Expr : Node {
 struct VarExpr : Expr {
   std::string name;
   std::unique_ptr<Expr> index;
+  /// Resolved by semantic analysis; null when the name did not resolve.
+  const Symbol *symbol = nullptr;
 
   VarExpr(SourceLocation l, std::string n)
       : Expr(NodeKind::VarExpr, l), name(std::move(n)) {}
@@ -206,6 +212,8 @@ struct BinaryExpr : Expr {
 struct CallExpr : Expr {
   std::string callee;
   std::vector<std::unique_ptr<Expr>> args;
+  /// Resolved by semantic analysis; null when the callee did not resolve.
+  const Symbol *symbol = nullptr;
 
   CallExpr(SourceLocation l, std::string c)
       : Expr(NodeKind::CallExpr, l), callee(std::move(c)) {}

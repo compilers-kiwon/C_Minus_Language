@@ -20,6 +20,8 @@ add_executable(cmc
   src/Diagnostic.cpp
   src/Lexer.cpp
   src/Parser.cpp
+  src/SemanticAnalyzer.cpp
+  src/Symbol.cpp
   src/Token.cpp
 )
 
