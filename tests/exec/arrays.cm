@@ -1,0 +1,26 @@
+/* Arrays are passed by reference, so a callee can fill the caller's array. */
+int g[5];
+void fill(int a[], int n)
+{ int i;
+  i = 0;
+  while (i < n)
+    { a[i] = i * i;
+      i = i + 1; }
+}
+int total(int a[], int n)
+{ int i; int s;
+  i = 0; s = 0;
+  while (i < n)
+    { s = s + a[i];
+      i = i + 1; }
+  return s;
+}
+void main(void)
+{ int local[4];
+  fill(g, 5);
+  output(total(g, 5));
+  fill(local, 4);
+  output(total(local, 4));
+  g[2] = 100;
+  output(g[2]);
+}

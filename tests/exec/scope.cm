@@ -1,0 +1,13 @@
+/* A parameter and a block-local both hide the global of the same name. */
+int x;
+int f(int x)
+{ return x + 1; }
+void main(void)
+{ x = 100;
+  output(f(1));
+  output(x);
+  { int x;
+    x = 7;
+    output(x); }
+  output(x);
+}

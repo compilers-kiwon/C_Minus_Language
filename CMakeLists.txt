@@ -62,3 +62,7 @@ enable_testing()
 add_test(NAME golden
   COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
           bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh)
+add_test(NAME execution
+  COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
+          CMINUS_RT=$<TARGET_FILE:cminus_rt>
+          bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)

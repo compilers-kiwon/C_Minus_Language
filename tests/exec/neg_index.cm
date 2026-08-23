@@ -1,0 +1,8 @@
+/* Spec 3.6: a negative subscript stops the program. */
+int a[5];
+void main(void)
+{ int i;
+  i = 0 - 1;
+  output(0);
+  output(a[i]);
+}
