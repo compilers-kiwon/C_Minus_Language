@@ -100,34 +100,6 @@ Other:
 
 Each `--dump-*` flag stops the pipeline right after the stage it prints.
 
-### Cross compilation
-
-```bash
-cmc --target aarch64-linux-gnu -c prog.cm -o prog.o
-```
-
-Any triple LLVM has a back end for works; `cmc` links every one of them in,
-which accounts for most of its size. The target is resolved before IR
-generation rather than at object-writing time, because the data layout decides
-how wide a pointer is and therefore what type a `getelementptr` index takes --
-`i64` on aarch64, `i32` on armv7.
-
-Linking as well as compiling needs two more things, and `cmc` says so up front
-rather than letting the linker fail with an object-format mismatch: a driver
-for the target, and a runtime built for it.
-
-```bash
-aarch64-linux-gnu-gcc -O2 -c runtime/cminus_rt.c -o rt.o
-aarch64-linux-gnu-ar rcs libcminus_rt-aarch64.a rt.o
-cmc --target aarch64-linux-gnu --cc aarch64-linux-gnu-gcc --runtime libcminus_rt-aarch64.a -O2 prog.cm -o prog
-qemu-aarch64 -L /usr/aarch64-linux-gnu ./prog
-```
-
-`--cc` takes a whole command rather than just a name, because a cross
-toolchain is unusable without its sysroot. When it is given, `cmc` leaves the
-command alone -- no `-fuse-ld=lld` gets added to a toolchain it knows nothing
-about.
-
 ### Why the link goes through a C driver
 
 LLVM ships LLD, but LLD replaces `ld`, not `cc`. Turning one object file into
@@ -164,6 +136,112 @@ is enough to switch the default over.
 The runtime archive is found without configuration: `$CMINUS_RUNTIME` first,
 then next to the compiler (the build tree), then `../lib` (an unpacked
 release).
+
+## Cross compilation
+
+`--target` names the architecture to generate code for. Anything LLVM has a
+back end for works, because `cmc` links all of them in:
+
+```bash
+cmc --target aarch64-linux-gnu   -c prog.cm -o prog.o
+cmc --target riscv64-linux-gnu   -c prog.cm -o prog.o
+cmc --target arm-linux-gnueabihf -c prog.cm -o prog.o
+```
+
+`llc --version` lists the registered targets. They are the same set `cmc`
+carries, since both come from the LLVM it was built against.
+
+### What linking needs
+
+An object file needs nothing but `--target`. A *program* needs two things
+`cmc` cannot supply and will not guess:
+
+| | Why |
+| :- | :- |
+| a C driver for the target | It owns the link line: crt objects, libc, the dynamic loader. See [Why the link goes through a C driver](#why-the-link-goes-through-a-c-driver). |
+| a runtime built for the target | `libcminus_rt.a` holds `input`, `output` and the subscript handler, and the copy beside `cmc` is the host's. |
+
+Both are reported before the link is attempted, rather than surfacing later as
+an object-format mismatch that explains nothing:
+
+```
+cmc: error: linking for 'aarch64-linux-gnu' needs a matching C driver;
+     pass --cc "aarch64-linux-gnu-gcc --sysroot=<path>", or use -c and link separately
+```
+
+### A worked example
+
+Building for aarch64 on an x86-64 host and running the result under emulation.
+On Ubuntu:
+
+```bash
+sudo apt install -y gcc-aarch64-linux-gnu qemu-user
+```
+
+Build the runtime for the target, once:
+
+```bash
+aarch64-linux-gnu-gcc -O2 -c runtime/cminus_rt.c -o rt.o
+aarch64-linux-gnu-ar rcs libcminus_rt-aarch64.a rt.o
+```
+
+Then compile, link and run:
+
+```bash
+cmc --target aarch64-linux-gnu --cc aarch64-linux-gnu-gcc --runtime libcminus_rt-aarch64.a -O2 examples/gcd.cm -o gcd
+echo "270 192" | qemu-aarch64 -L /usr/aarch64-linux-gnu ./gcd
+```
+
+```
+6
+```
+
+`-v` prints the link command, and `file ./gcd` says what came out
+(`ELF 64-bit LSB pie executable, ARM aarch64`).
+
+### Other targets
+
+Only the three names change. A cross gcc installs its sysroot at
+`/usr/<triple>`, which is what the emulator's `-L` wants.
+
+| Triple | Ubuntu package | Emulator |
+| :- | :- | :- |
+| `aarch64-linux-gnu` | `gcc-aarch64-linux-gnu` | `qemu-aarch64` |
+| `arm-linux-gnueabihf` | `gcc-arm-linux-gnueabihf` | `qemu-arm` |
+| `riscv64-linux-gnu` | `gcc-riscv64-linux-gnu` | `qemu-riscv64` |
+| `powerpc64le-linux-gnu` | `gcc-powerpc64le-linux-gnu` | `qemu-ppc64le` |
+
+### Under another build system
+
+A build system that links for itself wants only the object:
+
+```bash
+cmc --target "$TARGET" -c prog.cm -o prog.o
+```
+
+If it should link too, `--cc` takes a command with arguments rather than a
+program name, because a cross toolchain is unusable without its sysroot and a
+whole command line is how `CC` is normally handed around:
+
+```bash
+cmc --target "$TARGET" --cc "$CC" --runtime "$SYSROOT/lib/libcminus_rt.a" prog.cm -o prog
+```
+
+`$CMINUS_CC` and `$CMINUS_RUNTIME` set the same two from the environment.
+Naming the driver this way also stops `cmc` adding `-fuse-ld=lld` to a
+toolchain it knows nothing about.
+
+### Why the target is resolved before IR generation
+
+Not at object-writing time, which is where it would be if `--target` were only
+a code generation flag. The data layout says how wide a pointer is, and that
+decides the type a `getelementptr` index takes, so the module has to carry it
+before the first instruction is built:
+
+```llvm
+armv7    %a.elem = getelementptr i32, ptr %a.base, i32 %low2
+aarch64  %a.elem = getelementptr i32, ptr %a.base, i64 %idx
+```
 
 ## How C- maps onto LLVM
 
