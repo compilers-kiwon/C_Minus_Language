@@ -67,7 +67,10 @@ jobs:
           strip "dist/$NAME/bin/cmc"
 
           tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
-          sha256sum "dist/$NAME.tar.gz" | tee "dist/$NAME.tar.gz.sha256"
+          # Record the bare file name. Running sha256sum from here would write
+          # "dist/cmc-...", which only verifies against this job's directory
+          # layout and fails for anyone who downloads the two files together.
+          ( cd dist && sha256sum "$NAME.tar.gz" | tee "$NAME.tar.gz.sha256" )
 
           echo "tag=$TAG"   >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
