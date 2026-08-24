@@ -52,6 +52,12 @@ Two options exist for checking rather than developing:
 | :- | :- |
 | `-DCMINUS_WERROR=ON` | Warnings become errors |
 | `-DCMINUS_SANITIZERS=ON` | Build with ASan and UBSan, not recovering from a report |
+| `-DCMINUS_BUILD_RUNTIME=OFF` | Compiler only; nothing is built for the target |
+| `-DCMINUS_BUILD_COMPILER=OFF` | Runtime only, and LLVM is not needed at all |
+
+The last two exist because the compiler and the runtime end up on different
+machines as soon as anything is cross-compiled, and a build system that knows
+that wants to build them separately.
 
 ## Running
 
@@ -298,6 +304,30 @@ leaves the upper bound unchecked, and marking an out-of-range access
 exploit. The negative half of the check *is* required by the spec, so each
 subscript is guarded unless `-fno-index-check` is given.
 
+## Yocto
+
+[`meta-cminus/`](meta-cminus/) is a layer with three recipes:
+
+| Recipe | Runs on | Purpose |
+| :- | :- | :- |
+| `cmc-native` | build host | the compiler; `DEPENDS = "llvm-native"` |
+| `cminus-runtime` | target | `libcminus_rt.a`, linked into compiled programs |
+| `cminus-hello` | target | a `.cm` source turned into a binary in the image |
+
+```bash
+bitbake-layers add-layer /path/to/C_Minus_Language/meta-cminus
+bitbake cminus-hello
+```
+
+The split into three follows from Yocto cross-compiling everything: `cmc` runs
+where the build runs, while the runtime is linked into programs for the device.
+Needs LLVM 21, so openembedded-core from `wrynose` on.
+
+The recipes parse and `bitbake -n` resolves the full task graph for all three
+against openembedded-core master. They have not been built end to end, which
+would compile LLVM from source. [meta-cminus/README.md](meta-cminus/README.md)
+has the details.
+
 ## Tests
 
 Golden-file suites. Each runs the compiler under one set of flags and
@@ -368,6 +398,7 @@ include/cminus/   public headers
 src/              implementation
 runtime/          input, output and the negative-subscript handler
 .github/          CI and release workflows
+meta-cminus/      Yocto layer: recipes for the compiler, runtime and an example
 docs/spec/        language spec and grammar analysis
 examples/         the two sample programs from the spec
 tests/lex/        scanner golden-file tests
@@ -386,3 +417,4 @@ tests/exec/       end-to-end compile-link-run tests
 | Symbol table + semantic analysis (spec §3) | done |
 | LLVM IR generation, optimization and object output | done |
 | Cross compilation to any LLVM back end | done |
+| Yocto layer (recipes parse; not built end to end) | done |
