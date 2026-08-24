@@ -8,9 +8,11 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=0813489dfd365ec0eee0107c4d289c63"
 
 SRC_URI = "git://github.com/compilers-kiwon/C_Minus_Language.git;protocol=https;branch=main"
 # Pinned to the commit rather than the tag: a tag can be moved, a commit cannot.
-SRCREV = "4ab9b7ff03008d01b9e034ddb0bbb15e0531a580"
-
-S = "${WORKDIR}/git"
+# Past v0.1.2: the split into CMINUS_BUILD_COMPILER and
+# CMINUS_BUILD_RUNTIME, which these two recipes depend on, and the
+# licence file, both landed after that tag.
+SRCREV = "bbca60e208fa27b3213a2e75d1b72aad5d500d5d"
+PV = "0.1.2+git"
 
 DEPENDS = "llvm-native"
 

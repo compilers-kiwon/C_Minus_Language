@@ -53,6 +53,24 @@ IMAGE_INSTALL:append = " cminus-hello"
 
 ## Status
 
-The recipes parse, and `bitbake -n` resolves the full task graph for all three
-against openembedded-core master. They have not been built end to end: doing so
-compiles LLVM from source, which takes hours.
+Built end to end against openembedded-core master (`blacksail`), LLVM 22.1.8,
+`MACHINE = "qemux86-64"`: 1035 tasks, all succeeded. The resulting binary
+carries the distribution's hardening (`GNU_HASH`, `BIND_NOW`, PIE), runs, and
+packages into `cminus-hello{,-dbg,-dev}_1.0-r0_x86-64-v3.ipk`.
+
+Four things only the real build could find, in the order they appeared:
+
+| Symptom | Cause |
+| :- | :- |
+| `do_unpack` fatal | `S = "${WORKDIR}/git"` is now rejected; oe-core sets `S` itself |
+| `find_package(LLVM)` in a runtime-only build | `SRCREV` pinned a commit older than the CMake split |
+| QA: no `GNU_HASH` | `${LDFLAGS}` was not passed to the driver, only `${CC}` |
+| `DEPENDS = "cmc-native"` unresolved | `inherit native` alone leaves `PN` as `cmc`; the file needs the `-native` suffix |
+
+The last one showed up in variable expansion, the rest only when tasks ran.
+
+## Bumping the revision
+
+`SRCREV` pins the revision that was verified rather than a moving tag. To move
+it, set it to a pushed commit that contains `CMINUS_BUILD_COMPILER`,
+`CMINUS_BUILD_RUNTIME` and `LICENSE`, and rerun `bitbake cminus-hello`.

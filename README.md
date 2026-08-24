@@ -323,10 +323,10 @@ The split into three follows from Yocto cross-compiling everything: `cmc` runs
 where the build runs, while the runtime is linked into programs for the device.
 Needs LLVM 21, so openembedded-core from `wrynose` on.
 
-The recipes parse and `bitbake -n` resolves the full task graph for all three
-against openembedded-core master. They have not been built end to end, which
-would compile LLVM from source. [meta-cminus/README.md](meta-cminus/README.md)
-has the details.
+Built end to end against openembedded-core master with LLVM 22.1.8: 1035 tasks,
+all succeeded, and the resulting binary runs and carries the distribution's
+hardening flags. [meta-cminus/README.md](meta-cminus/README.md) lists the four
+problems that only surfaced once the tasks actually ran.
 
 ## Tests
 
@@ -417,4 +417,4 @@ tests/exec/       end-to-end compile-link-run tests
 | Symbol table + semantic analysis (spec §3) | done |
 | LLVM IR generation, optimization and object output | done |
 | Cross compilation to any LLVM back end | done |
-| Yocto layer (recipes parse; not built end to end) | done |
+| Yocto layer (built end to end) | done |

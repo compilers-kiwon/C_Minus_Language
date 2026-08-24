@@ -22,9 +22,14 @@ do_compile() {
     # --target picks the architecture. --cc takes the whole driver command,
     # not a program name, because the cross driver is useless without the
     # sysroot BitBake puts in CC.
+    #
+    # LDFLAGS belongs in that same command: cmc uses the driver only to link,
+    # and the distribution's link flags are policy rather than decoration.
+    # Leave them out and the binary gets a SysV hash instead of GNU_HASH,
+    # which package QA rejects.
     ${STAGING_BINDIR_NATIVE}/cmc \
         --target ${TARGET_SYS} \
-        --cc "${CC}" \
+        --cc "${CC} ${LDFLAGS}" \
         --runtime ${STAGING_LIBDIR}/libcminus_rt.a \
         -O2 ${S}/hello.cm \
         -o ${B}/cminus-hello
