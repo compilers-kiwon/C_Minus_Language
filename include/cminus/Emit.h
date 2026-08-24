@@ -10,6 +10,21 @@ class Module;
 
 namespace cminus {
 
+/// Which machine to generate code for, and the details a triple cannot carry.
+struct TargetSpec {
+  /// Empty means the host.
+  std::string triple;
+  /// Empty means "generic".
+  std::string cpu;
+  /// LLVM feature list such as "+m,+a,+f,+d,+c". Empty means a default
+  /// suitable for the triple.
+  std::string features;
+  /// Target ABI such as "lp64d". Empty means a default suitable for the
+  /// triple.
+  std::string abi;
+  unsigned optLevel = 0;
+};
+
 /// The machine code is being produced for.
 ///
 /// This has to exist before IR generation, not just before object emission:
@@ -18,11 +33,10 @@ namespace cminus {
 /// on it.
 class Target {
 public:
-  /// Resolve a target triple. An empty `triple` means the host. Returns null
-  /// and fills `error` when the triple names a back end LLVM was not built
-  /// with.
-  static std::unique_ptr<Target> create(const std::string &triple,
-                                        unsigned optLevel, std::string &error);
+  /// Resolve a target. Returns null and fills `error` when the triple names a
+  /// back end LLVM was not built with.
+  static std::unique_ptr<Target> create(const TargetSpec &spec,
+                                        std::string &error);
   ~Target();
 
   Target(const Target &) = delete;
@@ -32,6 +46,10 @@ public:
   const std::string &triple() const;
   /// Textual data layout, to stamp on the module before generating IR.
   const std::string &dataLayout() const;
+  /// What was actually used, once the defaults were filled in.
+  const std::string &cpu() const;
+  const std::string &features() const;
+  const std::string &abi() const;
 
   bool writeObjectFile(llvm::Module &module, const std::string &path,
                        std::string &error) const;

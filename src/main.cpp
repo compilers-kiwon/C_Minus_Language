@@ -50,6 +50,9 @@ struct Options {
   std::string inputPath;
   std::string outputPath; // empty means "pick a default"
   std::string targetTriple; // empty means the host
+  std::string targetCPU;
+  std::string targetFeatures;
+  std::string targetABI;
   Stage stopAfter = Stage::Emit;
   OutputKind output = OutputKind::Executable;
   bool dumpTokens = false;
@@ -82,6 +85,10 @@ void printUsage(std::ostream &os, const char *argv0) {
      << "Cross compilation:\n"
      << "  --target <triple> Generate code for <triple> instead of the host,\n"
      << "                    e.g. aarch64-linux-gnu or riscv64-linux-gnu\n"
+     << "  --mcpu=<name>     Target CPU (default generic)\n"
+     << "  --mattr=<list>    Target features, e.g. +m,+a,+f,+d,+c\n"
+     << "  --target-abi=<n>  Target ABI, e.g. lp64d. Only some targets keep\n"
+     << "                    this out of the triple; RISC-V is one\n"
      << "\n"
      << "Linking:\n"
      << "  --cc <command>    C driver used to link. May carry arguments, as a\n"
@@ -270,6 +277,12 @@ int main(int argc, char **argv) {
         opts.targetTriple = value;
     } else if (arg.rfind("--target=", 0) == 0) {
       opts.targetTriple = arg.substr(std::string("--target=").size());
+    } else if (arg.rfind("--mcpu=", 0) == 0) {
+      opts.targetCPU = arg.substr(std::string("--mcpu=").size());
+    } else if (arg.rfind("--mattr=", 0) == 0) {
+      opts.targetFeatures = arg.substr(std::string("--mattr=").size());
+    } else if (arg.rfind("--target-abi=", 0) == 0) {
+      opts.targetABI = arg.substr(std::string("--target-abi=").size());
     } else if (arg.rfind("--use-ld=", 0) == 0) {
       opts.useLinker = arg.substr(std::string("--use-ld=").size());
       opts.haveUseLinker = true;
@@ -343,13 +356,28 @@ int main(int argc, char **argv) {
   // --- resolve the target first: the data layout has to be on the module
   // before any IR is generated, because it decides how wide a pointer is.
   std::string error;
-  std::unique_ptr<cminus::Target> target =
-      cminus::Target::create(opts.targetTriple, opts.optLevel, error);
+  cminus::TargetSpec spec;
+  spec.triple = opts.targetTriple;
+  spec.cpu = opts.targetCPU;
+  spec.features = opts.targetFeatures;
+  spec.abi = opts.targetABI;
+  spec.optLevel = opts.optLevel;
+
+  std::unique_ptr<cminus::Target> target = cminus::Target::create(spec, error);
   if (!target) {
     std::cerr << "cmc: error: " << error << '\n';
     return 1;
   }
   const bool crossing = target->triple() != cminus::hostTriple();
+
+  if (opts.verbose) {
+    std::cerr << "target: " << target->triple() << "  cpu: " << target->cpu();
+    if (!target->features().empty())
+      std::cerr << "  features: " << target->features();
+    if (!target->abi().empty())
+      std::cerr << "  abi: " << target->abi();
+    std::cerr << '\n';
+  }
 
   if (opts.output == OutputKind::Executable && crossing &&
       !checkCrossLinkInputs(opts, opts.targetTriple, error)) {

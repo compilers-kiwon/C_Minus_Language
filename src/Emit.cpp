@@ -46,12 +46,43 @@ void initializeTargets() {
   (void)once;
 }
 
+/// Fill in what a triple cannot say.
+///
+/// A triple carries the float ABI for ARM -- that is what `gnueabihf` means --
+/// but RISC-V keeps it in a separate -mabi, so LLVM falls back to its bare
+/// default of soft float with no extensions. No distribution builds its libc
+/// that way, and the linker rejects the mixture outright:
+///
+///   can't link soft-float modules with double-float modules
+///
+/// Linux RISC-V userspace is rv64gc/lp64d, which is what clang defaults to
+/// and what this matches.
+void applyTripleDefaults(const llvm::Triple &triple, std::string &features,
+                         std::string &abi) {
+  if (!triple.isOSLinux())
+    return;
+  if (triple.isRISCV64()) {
+    if (features.empty())
+      features = "+m,+a,+f,+d,+c";
+    if (abi.empty())
+      abi = "lp64d";
+  } else if (triple.isRISCV32()) {
+    if (features.empty())
+      features = "+m,+a,+f,+d,+c";
+    if (abi.empty())
+      abi = "ilp32d";
+  }
+}
+
 } // namespace
 
 struct Target::Impl {
   std::unique_ptr<llvm::TargetMachine> machine;
   std::string triple;
   std::string dataLayout;
+  std::string cpu;
+  std::string features;
+  std::string abi;
 };
 
 Target::Target(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -59,15 +90,18 @@ Target::~Target() = default;
 
 const std::string &Target::triple() const { return impl_->triple; }
 const std::string &Target::dataLayout() const { return impl_->dataLayout; }
+const std::string &Target::cpu() const { return impl_->cpu; }
+const std::string &Target::features() const { return impl_->features; }
+const std::string &Target::abi() const { return impl_->abi; }
 
-std::unique_ptr<Target> Target::create(const std::string &requested,
-                                       unsigned optLevel, std::string &error) {
+std::unique_ptr<Target> Target::create(const TargetSpec &spec,
+                                       std::string &error) {
   error.clear();
   initializeTargets();
 
-  const llvm::Triple triple(requested.empty()
+  const llvm::Triple triple(spec.triple.empty()
                                 ? llvm::sys::getDefaultTargetTriple()
-                                : llvm::Triple::normalize(requested));
+                                : llvm::Triple::normalize(spec.triple));
 
   std::string lookupError;
   const llvm::Target *target =
@@ -77,12 +111,18 @@ std::unique_ptr<Target> Target::create(const std::string &requested,
     return nullptr;
   }
 
+  const std::string cpu = spec.cpu.empty() ? "generic" : spec.cpu;
+  std::string features = spec.features;
+  std::string abi = spec.abi;
+  applyTripleDefaults(triple, features, abi);
+
   llvm::TargetOptions options;
+  options.MCOptions.ABIName = abi;
   // Position-independent code, which is what every mainstream toolchain links
   // by default.
   std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-      triple, "generic", "", options, llvm::Reloc::PIC_, std::nullopt,
-      codeGenLevel(optLevel)));
+      triple, cpu, features, options, llvm::Reloc::PIC_, std::nullopt,
+      codeGenLevel(spec.optLevel)));
   if (!machine) {
     error = "cannot create a target machine for '" + triple.str() + "'";
     return nullptr;
@@ -91,6 +131,9 @@ std::unique_ptr<Target> Target::create(const std::string &requested,
   auto impl = std::make_unique<Impl>();
   impl->triple = triple.str();
   impl->dataLayout = machine->createDataLayout().getStringRepresentation();
+  impl->cpu = cpu;
+  impl->features = features;
+  impl->abi = abi;
   impl->machine = std::move(machine);
   return std::unique_ptr<Target>(new Target(std::move(impl)));
 }
