@@ -38,7 +38,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
             ninja-build zlib1g-dev libzstd-dev libxml2-dev \
-            gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
+            qemu-user \
+            gcc-aarch64-linux-gnu   libc6-dev-arm64-cross \
+            gcc-arm-linux-gnueabihf libc6-dev-armhf-cross \
+            gcc-riscv64-linux-gnu   libc6-dev-riscv64-cross
           # cmc looks for `ld.lld`, which is also the name the C driver goes
           # looking for once it is told -fuse-ld=lld. Only the versioned name
           # is reliably packaged, so make the plain one exist.
@@ -101,7 +104,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             "llvm-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" \
             ninja-build zlib1g-dev libzstd-dev libxml2-dev \
-            gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
+            qemu-user \
+            gcc-aarch64-linux-gnu   libc6-dev-arm64-cross \
+            gcc-arm-linux-gnueabihf libc6-dev-armhf-cross \
+            gcc-riscv64-linux-gnu   libc6-dev-riscv64-cross
           # cmc looks for `ld.lld`, which is also the name the C driver goes
           # looking for once it is told -fuse-ld=lld. Only the versioned name
           # is reliably packaged, so make the plain one exist.

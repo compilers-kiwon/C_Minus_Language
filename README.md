@@ -76,13 +76,23 @@ Output:
                     '-' means standard output)
   -O0 -O1 -O2 -O3   Optimization level (default -O0)
 
+Cross compilation:
+  --target <triple> Generate code for <triple> instead of the host,
+                    e.g. aarch64-linux-gnu or riscv64-linux-gnu
+  --mcpu=<name>     Target CPU (default generic)
+  --mattr=<list>    Target features, e.g. +m,+a,+f,+d,+c
+  --target-abi=<n>  Target ABI, e.g. lp64d. Only some targets keep
+                    this out of the triple; RISC-V is one
+
 Linking:
-  --cc <command>    C driver used to link (default $CMINUS_CC, else
-                    cc, clang or gcc)
-  --use-ld=<name>   Pass -fuse-ld=<name> to the driver; the default
-                    is lld when it is installed
-  --runtime <file>  Path to libcminus_rt.a (default $CMINUS_RUNTIME,
-                    else next to the compiler)
+  --cc <command>    C driver used to link. May carry arguments, as a
+                    cross toolchain needs its sysroot (default
+                    $CMINUS_CC, else cc, clang or gcc)
+  --use-ld=<name>   Pass -fuse-ld=<name> to the driver; lld is used
+                    by default when installed and --cc was not given
+  --runtime <file>  Path to libcminus_rt.a, which must be built for
+                    the target (default $CMINUS_RUNTIME, else next to
+                    the compiler)
   -save-temps       Keep the intermediate object file
   -v                Print the link command
 
@@ -175,8 +185,11 @@ Building for aarch64 on an x86-64 host and running the result under emulation.
 On Ubuntu:
 
 ```bash
-sudo apt install -y gcc-aarch64-linux-gnu qemu-user
+sudo apt install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
 ```
+
+The headers package matters: the compiler package only *recommends* it, so
+`--no-install-recommends` leaves a gcc that cannot find `stdio.h`.
 
 Build the runtime for the target, once:
 
@@ -198,6 +211,29 @@ echo "270 192" | qemu-aarch64 -L /usr/aarch64-linux-gnu ./gcd
 
 `-v` prints the link command, and `file ./gcd` says what came out
 (`ELF 64-bit LSB pie executable, ARM aarch64`).
+
+### What a triple does not say
+
+A triple carries the float ABI for ARM -- that is what the `hf` in
+`arm-linux-gnueabihf` means -- but RISC-V keeps it in a separate `-mabi`, so
+LLVM falls back to soft float with no extensions. No distribution builds its
+libc that way, and the linker says so:
+
+```
+riscv64-linux-gnu-ld.bfd: can't link soft-float modules with double-float modules
+```
+
+Linux RISC-V userspace is rv64gc/lp64d, so that is what `cmc` defaults to for
+a `riscv64-*-linux-*` triple, matching clang. `--mattr=` and `--target-abi=`
+override it where something else is wanted, and `-v` shows what was chosen:
+
+```bash
+cmc -v --target riscv64-linux-gnu -c prog.cm -o prog.o
+```
+
+```
+target: riscv64-unknown-linux-gnu  cpu: generic  features: +m,+a,+f,+d,+c  abi: lp64d
+```
 
 ### Other targets
 
@@ -289,15 +325,26 @@ followed by a separate link, which keeps that path honest:
 CMC=build/cmc tests/run_exec_tests.sh
 ```
 
-Cross suite. The same programs and the same expectations, built for another
-architecture and run under an emulator: what a C- program prints does not
+Cross suite. The same programs and the same expectations, built for other
+architectures and run under an emulator: what a C- program prints does not
 depend on the machine it runs on, so any difference is a code generation bug.
-It skips itself when no cross toolchain is installed.
+Three targets by default, each for a reason:
+
+| Target | Covers |
+| :- | :- |
+| `aarch64-linux-gnu` | 64-bit, the common cross target |
+| `arm-linux-gnueabihf` | 32-bit, and so the `i32` subscript index path |
+| `riscv64-linux-gnu` | a different instruction set family |
 
 ```bash
 CMC=build/cmc tests/run_cross_tests.sh
-CROSS_TARGET=riscv64-linux-gnu CROSS_EMU=qemu-riscv64 CMC=build/cmc tests/run_cross_tests.sh
+CROSS_TARGETS="riscv64-linux-gnu" CMC=build/cmc tests/run_cross_tests.sh
 ```
+
+A target whose toolchain is absent is skipped, so a machine with only some of
+them still runs what it can. `CROSS_REQUIRED=1` turns every skip into a
+failure, which is what CI sets: a skip there would be indistinguishable from
+a pass.
 
 `ctest --test-dir build` runs all three.
 
