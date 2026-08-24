@@ -39,6 +39,11 @@ carries LLVM 20.1 and the recipe will fail its version floor, which is why
 
 ## Use
 
+[BUILDING.md](BUILDING.md) has the whole thing from an empty machine: host
+packages, the locale BitBake insists on, which repositories to clone now that
+poky's master is dormant, and the `local.conf` settings. Once a build
+directory exists:
+
 ```bash
 bitbake-layers add-layer /path/to/C_Minus_Language/meta-cminus
 bitbake cmc-native          # the compiler

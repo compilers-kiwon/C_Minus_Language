@@ -319,6 +319,11 @@ bitbake-layers add-layer /path/to/C_Minus_Language/meta-cminus
 bitbake cminus-hello
 ```
 
+[meta-cminus/BUILDING.md](meta-cminus/BUILDING.md) covers it from an empty
+machine, including the parts that are easy to get wrong: poky's master branch
+is dormant so BitBake and openembedded-core are cloned separately, and BitBake
+will not start without an `en_US.UTF-8` locale.
+
 The split into three follows from Yocto cross-compiling everything: `cmc` runs
 where the build runs, while the runtime is linked into programs for the device.
 Needs LLVM 21, so openembedded-core from `wrynose` on.
