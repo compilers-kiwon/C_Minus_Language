@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
 #
-# Cross-compilation tests: build the end-to-end programs for another
-# architecture, run them under an emulator, and require the very same output
+# Cross-compilation tests: build the end-to-end programs for other
+# architectures, run them under an emulator, and require the very same output
 # as the host build.
 #
 # The cases and expectations are the ones in tests/exec: what a C- program
 # prints does not depend on the machine it runs on, so reusing them is the
 # point rather than a shortcut.
 #
-# Needs a cross toolchain, its target libc headers, and a user-mode emulator.
-# On Ubuntu:
-#   sudo apt install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
+# The default target list is chosen for what each one exercises:
 #
-# CROSS_REQUIRED=1 turns "tools missing" from a skip into a failure, which is
-# what CI wants: there, a skip would look just like a pass.
+#   aarch64-linux-gnu      64-bit, the common cross target
+#   arm-linux-gnueabihf    32-bit -- the only one that covers the i32
+#                          getelementptr index path
+#   riscv64-linux-gnu      a different instruction set family
 #
-# Everything is overridable, so another target can be tried without editing:
-#   CROSS_TARGET=riscv64-linux-gnu CROSS_CC=riscv64-linux-gnu-gcc \
-#   CROSS_SYSROOT=/usr/riscv64-linux-gnu CROSS_EMU=qemu-riscv64 \
+# Needs a cross toolchain per target, its libc headers, and a user-mode
+# emulator. On Ubuntu:
+#
+#   sudo apt install -y qemu-user \
+#     gcc-aarch64-linux-gnu   libc6-dev-arm64-cross \
+#     gcc-arm-linux-gnueabihf libc6-dev-armhf-cross \
+#     gcc-riscv64-linux-gnu   libc6-dev-riscv64-cross
+#
+# A target whose tools are missing is skipped, so a machine with only some of
+# them still runs what it can. CROSS_REQUIRED=1 turns every skip into a
+# failure, which is what CI wants: there, a skip looks just like a pass.
+#
+# Usage:
 #   CMC=build/cmc tests/run_cross_tests.sh
+#   CROSS_TARGETS="riscv64-linux-gnu" CMC=build/cmc tests/run_cross_tests.sh
+#
+# With a single target, CROSS_CC, CROSS_AR, CROSS_SYSROOT and CROSS_EMU
+# override what is derived from the triple.
 #
 set -uo pipefail
 
@@ -27,119 +41,183 @@ ROOT="$(dirname "$HERE")"
 CASES="$HERE/exec"
 CMC="${CMC:-$ROOT/build/cmc}"
 
-CROSS_TARGET="${CROSS_TARGET:-aarch64-linux-gnu}"
-CROSS_CC="${CROSS_CC:-${CROSS_TARGET}-gcc}"
-CROSS_AR="${CROSS_AR:-${CROSS_TARGET}-ar}"
-CROSS_SYSROOT="${CROSS_SYSROOT:-/usr/${CROSS_TARGET}}"
-CROSS_EMU="${CROSS_EMU:-qemu-${CROSS_TARGET%%-*}}"
+# CROSS_TARGET (singular) is accepted as a one-element list.
+CROSS_TARGETS="${CROSS_TARGETS:-${CROSS_TARGET:-aarch64-linux-gnu arm-linux-gnueabihf riscv64-linux-gnu}}"
+read -r -a targets <<< "$CROSS_TARGETS"
 
-# Missing tools mean "not tested here", not "broken": a machine without a
-# cross toolchain should not fail the suite. Somewhere that is supposed to
-# have one, though, a skip is indistinguishable from a pass and hides exactly
-# the breakage this suite exists to catch -- so CI sets CROSS_REQUIRED.
-skip() {
-  if [[ -n "${CROSS_REQUIRED:-}" ]]; then
-    echo "cross tests were required but cannot run: $1" >&2
-    exit 1
-  fi
-  echo "cross tests skipped: $1"
-  echo "0 passed, 0 failed"
-  exit 0
+required="${CROSS_REQUIRED:-}"
+
+fatal() {
+  echo "cross tests: $1" >&2
+  exit 1
 }
 
-[[ -x "$CMC" ]] || skip "cannot execute '$CMC'"
-[[ -d "$CASES" ]] || skip "no $CASES directory"
-command -v "$CROSS_CC"  > /dev/null || skip "no cross driver '$CROSS_CC'"
-command -v "$CROSS_EMU" > /dev/null || skip "no emulator '$CROSS_EMU'"
-
+if [[ ! -x "$CMC" ]]; then
+  [[ -n "$required" ]] && fatal "cannot execute '$CMC'"
+  echo "cross tests skipped: cannot execute '$CMC'"
+  echo "0 targets, 0 passed, 0 failed"
+  exit 0
+fi
+if [[ ! -d "$CASES" ]]; then
+  echo "0 targets, 0 passed, 0 failed"
+  exit 0
+fi
 CMC="$(cd "$(dirname "$CMC")" && pwd)/$(basename "$CMC")"
+
+# qemu's name for a triple. The leading component matches often enough to be
+# the fallback, but not always -- powerpc64le is qemu-ppc64le.
+emulator_for() {
+  case "$1" in
+  aarch64-*)     echo qemu-aarch64 ;;
+  arm-*)         echo qemu-arm ;;
+  riscv64-*)     echo qemu-riscv64 ;;
+  riscv32-*)     echo qemu-riscv32 ;;
+  powerpc64le-*) echo qemu-ppc64le ;;
+  powerpc64-*)   echo qemu-ppc64 ;;
+  powerpc-*)     echo qemu-ppc ;;
+  s390x-*)       echo qemu-s390x ;;
+  *)             echo "qemu-${1%%-*}" ;;
+  esac
+}
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-echo "cross target: $CROSS_TARGET   driver: $CROSS_CC   emulator: $CROSS_EMU"
-
-# The runtime has to be built for the target too; the host archive would be
-# rejected by the cross linker.
-if ! "$CROSS_CC" -O2 -c "$ROOT/runtime/cminus_rt.c" -o "$work/cminus_rt.o" 2>&1; then
-  # A driver that exists but cannot compile is a broken install, not an
-  # absent one, so this fails rather than skipping. The usual cause is that
-  # the target C library headers were left out: on Debian and Ubuntu they
-  # live in libc6-dev-<arch>-cross, which the compiler package only
-  # recommends and so is dropped by --no-install-recommends.
-  echo "cross tests failed: '$CROSS_CC' cannot compile for $CROSS_TARGET" >&2
-  echo "  are the target libc headers installed? (Debian/Ubuntu:" >&2
-  echo "  libc6-dev-<arch>-cross, e.g. libc6-dev-arm64-cross)" >&2
-  exit 1
-fi
-ar_tool="$CROSS_AR"
-command -v "$ar_tool" > /dev/null || ar_tool=ar
-if ! "$ar_tool" rcs "$work/libcminus_rt.a" "$work/cminus_rt.o" 2>&1; then
-  echo "cross tests failed: cannot archive the runtime" >&2
-  exit 1
-fi
-
-emu_args=()
-[[ -d "$CROSS_SYSROOT" ]] && emu_args=(-L "$CROSS_SYSROOT")
-
-cd "$CASES" || exit 2
-
 pass=0
 fail=0
+ran=0
 failed_names=()
+skipped=()
 
-build_and_run() {
+# Run a built program on its input; echoes what it produced.
+capture() {
   local name="$1"
-  local level="$2"
-  local exe="$work/$name$level"
-
-  if ! "$CMC" --target "$CROSS_TARGET" --cc "$CROSS_CC" \
-       --runtime "$work/libcminus_rt.a" "$level" \
-       "$name.cm" -o "$exe" 2>&1; then
-    echo "cmc failed"
-    return
-  fi
-
+  local exe="$2"
+  local emu="$3"
   local stdin_file=/dev/null
   [[ -f "$name.in" ]] && stdin_file="$name.in"
 
   local output
   local status
-  output="$("$CROSS_EMU" "${emu_args[@]}" "$exe" < "$stdin_file" 2>&1)"
+  # shellcheck disable=SC2086
+  output="$($emu "$exe" < "$stdin_file" 2>&1)"
   status=$?
   printf '%s\nexit status: %s\n' "$output" "$status"
 }
 
+build_and_run() {
+  local triple="$1"
+  local cc="$2"
+  local runtime="$3"
+  local name="$4"
+  local level="$5"
+  local emu="$6"
+  local exe="$work/${triple%%-*}-$name$level"
+
+  if ! "$CMC" --target "$triple" --cc "$cc" --runtime "$runtime" "$level" \
+       "$name.cm" -o "$exe" 2>&1; then
+    echo "cmc failed"
+    return
+  fi
+  capture "$name" "$exe" "$emu"
+}
+
+run_target() {
+  local triple="$1"
+  local label="${triple%%-*}"
+
+  local cc="${triple}-gcc"
+  local ar="${triple}-ar"
+  local sysroot="/usr/${triple}"
+  local emu
+  emu="$(emulator_for "$triple")"
+
+  if (( ${#targets[@]} == 1 )); then
+    cc="${CROSS_CC:-$cc}"
+    ar="${CROSS_AR:-$ar}"
+    sysroot="${CROSS_SYSROOT:-$sysroot}"
+    emu="${CROSS_EMU:-$emu}"
+  fi
+
+  if ! command -v "$cc" > /dev/null; then
+    [[ -n "$required" ]] && fatal "required target $triple has no driver '$cc'"
+    skipped+=("$triple (no $cc)")
+    return
+  fi
+  if ! command -v "$emu" > /dev/null; then
+    [[ -n "$required" ]] && fatal "required target $triple has no emulator '$emu'"
+    skipped+=("$triple (no $emu)")
+    return
+  fi
+
+  echo "cross target: $triple   driver: $cc   emulator: $emu"
+
+  # The runtime has to be built for the target too; the host archive would be
+  # rejected by the cross linker.
+  local rt="$work/$label"
+  mkdir -p "$rt"
+  if ! "$cc" -O2 -c "$ROOT/runtime/cminus_rt.c" -o "$rt/cminus_rt.o" 2>&1; then
+    # A driver that exists but cannot compile is a broken install, not an
+    # absent one. The usual cause is missing target libc headers: on Debian
+    # and Ubuntu those live in libc6-dev-<arch>-cross, which the compiler
+    # package only recommends and so --no-install-recommends drops.
+    fatal "'$cc' cannot compile for $triple; are the target libc headers installed? (libc6-dev-<arch>-cross)"
+  fi
+  command -v "$ar" > /dev/null || ar=ar
+  "$ar" rcs "$rt/libcminus_rt.a" "$rt/cminus_rt.o" 2>&1 ||
+    fatal "cannot archive the runtime for $triple"
+
+  local emu_cmd="$emu"
+  [[ -d "$sysroot" ]] && emu_cmd="$emu -L $sysroot"
+
+  local src
+  local name
+  local expected
+  local actual
+  local optimized
+  for src in *.cm; do
+    name="${src%.cm}"
+    expected="$name.expected"
+    [[ -f "$expected" ]] || continue
+
+    actual="$(build_and_run "$triple" "$cc" "$rt/libcminus_rt.a" "$name" -O0 "$emu_cmd")"
+    optimized="$(build_and_run "$triple" "$cc" "$rt/libcminus_rt.a" "$name" -O2 "$emu_cmd")"
+
+    if [[ "$actual" != "$optimized" ]]; then
+      echo "FAIL     $label/$name  (-O0 and -O2 disagree)"
+      diff -u <(printf '%s' "$actual") <(printf '%s' "$optimized") | head -20
+      failed_names+=("$label/$name")
+      (( fail++ ))
+      continue
+    fi
+
+    if printf '%s' "$actual" | diff -u "$expected" - > "$work/$label-$name.diff"; then
+      echo "ok       $label/$name"
+      (( pass++ ))
+    else
+      echo "FAIL     $label/$name  (differs from the host result)"
+      cat "$work/$label-$name.diff"
+      failed_names+=("$label/$name")
+      (( fail++ ))
+    fi
+  done
+  (( ran++ ))
+  echo
+}
+
+cd "$CASES" || exit 2
+
 shopt -s nullglob
-for src in *.cm; do
-  name="${src%.cm}"
-  expected="$name.expected"
-  [[ -f "$expected" ]] || continue
-
-  actual="$(build_and_run "$name" -O0)"
-  optimized="$(build_and_run "$name" -O2)"
-
-  if [[ "$actual" != "$optimized" ]]; then
-    echo "FAIL     cross/$name  (-O0 and -O2 disagree)"
-    diff -u <(printf '%s' "$actual") <(printf '%s' "$optimized") | head -20
-    failed_names+=("$name")
-    (( fail++ ))
-    continue
-  fi
-
-  if printf '%s' "$actual" | diff -u "$expected" - > "$work/$name.diff"; then
-    echo "ok       cross/$name"
-    (( pass++ ))
-  else
-    echo "FAIL     cross/$name  (differs from the host result)"
-    cat "$work/$name.diff"
-    failed_names+=("$name")
-    (( fail++ ))
-  fi
+for triple in "${targets[@]}"; do
+  run_target "$triple"
 done
 
-echo
-echo "$pass passed, $fail failed"
+for note in "${skipped[@]}"; do
+  echo "skipped  $note"
+done
+(( ${#skipped[@]} > 0 )) && echo
+
+echo "$ran targets, $pass passed, $fail failed"
 if (( fail > 0 )); then
   printf 'failing: %s\n' "${failed_names[*]}"
   exit 1
