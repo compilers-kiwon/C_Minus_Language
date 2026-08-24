@@ -11,6 +11,30 @@ LLVM back end.
 - [docs/spec/analysis.md](docs/spec/analysis.md) — FIRST/FOLLOW tables, conflict
   analysis, the LL(1) rewrite of the grammar, and the semantic-check list
 
+## Getting it
+
+Three ways in, depending on what you want.
+
+**A released binary.** Nothing to build; needs a glibc no older than Ubuntu
+24.04's, since LLVM itself is linked in.
+
+```bash
+curl -sSLO https://github.com/compilers-kiwon/C_Minus_Language/releases/latest/download/cmc-v0.1.2-linux-x86_64.tar.gz
+tar -xzf cmc-v0.1.2-linux-x86_64.tar.gz && cd cmc-v0.1.2-linux-x86_64
+bin/cmc -O2 examples/gcd.cm -o gcd && echo "270 192" | ./gcd
+```
+
+**From source.** See [Building](#building) below for the LLVM 21 requirement.
+
+```bash
+git clone https://github.com/compilers-kiwon/C_Minus_Language.git
+cd C_Minus_Language
+cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
+```
+
+**Through Yocto**, to put a C- program in an embedded image:
+[meta-cminus/BUILDING.md](meta-cminus/BUILDING.md).
+
 ## Design choices
 
 | Decision | Choice |
