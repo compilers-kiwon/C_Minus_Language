@@ -56,8 +56,8 @@ Do not run this under `set -u`: the script reads `BBSERVER` before setting it.
 Append to `conf/local.conf`:
 
 ```
-BB_NUMBER_THREADS = "28"
-PARALLEL_MAKE = "-j 28"
+BB_NUMBER_THREADS = "8"
+PARALLEL_MAKE = "-j 8"
 
 # Download finished task output where the input hashes match, instead of
 # rebuilding it. This is what keeps LLVM from being compiled locally.
@@ -67,7 +67,18 @@ SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfil
 SANITY_TESTED_DISTROS = ""
 ```
 
-Set the thread counts to your core count.
+**Size these by memory, not by core count.** The two multiply: BitBake runs
+`BB_NUMBER_THREADS` recipes at once and each of them may run `PARALLEL_MAKE`
+compilers, so 28 and `-j 28` is up to 784 of them. Building one recipe never
+comes close, which is how the mistake hides; building an image did, and the
+kernel started killing processes:
+
+```
+Out of memory: Killed process 2189 (systemd)
+```
+
+Reckon on a gigabyte or two per compiler. 8 and `-j 8` is comfortable on a
+32 GB machine.
 
 ## 6. Add the layer and build
 

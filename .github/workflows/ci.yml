@@ -89,6 +89,62 @@ jobs:
           CROSS_REQUIRED: "1"
         run: ctest --test-dir build --output-on-failure
 
+  # Parses meta-cminus against openembedded-core rather than building it: a
+  # real build compiles LLVM from source and takes hours. Parsing still
+  # catches the layer going stale -- a renamed CMake option, a recipe that
+  # stops resolving, a LAYERSERIES_COMPAT that no longer exists.
+  yocto-layer:
+    name: Yocto layer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: cminus
+
+      - name: Install BitBake's host requirements
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gawk diffstat chrpath cpio zstd lz4 file locales
+          # BitBake refuses to start without this one.
+          sudo sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+          sudo locale-gen
+
+      - name: Fetch BitBake and openembedded-core
+        run: |
+          set -euxo pipefail
+          mkdir -p oe && cd oe
+          git clone --depth 1 https://git.openembedded.org/bitbake
+          git clone --depth 1 https://git.openembedded.org/openembedded-core
+
+      - name: Parse the layer and check what it resolves to
+        run: |
+          set -eo pipefail
+          cd oe
+          export BITBAKEDIR="$PWD/bitbake"
+          source openembedded-core/oe-init-build-env build > /dev/null
+          echo 'SANITY_TESTED_DISTROS = ""' >> conf/local.conf
+          bitbake-layers add-layer "$GITHUB_WORKSPACE/cminus/meta-cminus"
+
+          bitbake -p
+
+          for r in cmc-native cminus-runtime cminus-hello; do
+            bitbake -e "$r" > "/tmp/$r.env"
+            grep -q "^PN=\"$r\"" "/tmp/$r.env"
+          done
+
+          # The compiler is native and needs LLVM; the runtime is neither.
+          grep -q 'DEPENDS=.*llvm-native'          /tmp/cmc-native.env
+          grep -q 'CLASSOVERRIDE="class-native"'   /tmp/cmc-native.env
+          grep -q 'CMINUS_BUILD_COMPILER=OFF'      /tmp/cminus-runtime.env
+
+          # The example must hand the driver a command and the distro's link
+          # flags; without the latter package QA rejects the binary.
+          sed -n '/^do_compile()/,/^}/p' /tmp/cminus-hello.env > /tmp/hello.sh
+          grep -q -- '--cc "'      /tmp/hello.sh
+          grep -q 'hash-style=gnu' /tmp/hello.sh
+
   sanitizers:
     name: ASan + UBSan
     runs-on: ubuntu-24.04

@@ -58,10 +58,35 @@ IMAGE_INSTALL:append = " cminus-hello"
 
 ## Status
 
-Built end to end against openembedded-core master (`blacksail`), LLVM 22.1.8,
-`MACHINE = "qemux86-64"`: 1035 tasks, all succeeded. The resulting binary
-carries the distribution's hardening (`GNU_HASH`, `BIND_NOW`, PIE), runs, and
-packages into `cminus-hello{,-dbg,-dev}_1.0-r0_x86-64-v3.ipk`.
+Built end to end against openembedded-core master (`blacksail`) with LLVM
+22.1.8, on two machines. 1035 tasks each, all succeeded:
+
+| `MACHINE` | Result |
+| :- | :- |
+| `qemux86-64` | x86-64 binary, prints 6 under `qemu-x86_64` |
+| `qemuarm64` | ARM aarch64 binary, prints 6 under `qemu-aarch64` |
+
+Nothing in the recipes changed between the two: `cminus-hello` passes
+`${TARGET_SYS}` to `cmc --target`, so the machine setting carries through.
+
+The package is what `IMAGE_INSTALL` would install, and it is well formed:
+
+```
+-rwxr-xr-x root/root  67592  ./usr/bin/cminus-hello
+Package: cminus-hello   Architecture: cortexa57   Depends: libc6 (>= 2.44+git...)
+```
+
+Stripped, with the symbols split into `-dbg`, and the libc dependency detected
+automatically.
+
+**Not verified: the rootfs assembly.** `IMAGE_INSTALL:append = " cminus-hello"`
+followed by `bitbake core-image-minimal` was attempted five times and never
+finished, for reasons outside the layer: an out-of-memory kill from
+over-parallel settings, then the build host tearing the environment down
+mid-task, then a pseudo database left inconsistent by those kills. Assembling
+a rootfs is openembedded-core's own machinery rather than anything this layer
+supplies, and the package it would consume is checked above -- but that is an
+argument, not a test, and it is recorded here as untested.
 
 Four things only the real build could find, in the order they appeared:
 

@@ -352,10 +352,12 @@ The split into three follows from Yocto cross-compiling everything: `cmc` runs
 where the build runs, while the runtime is linked into programs for the device.
 Needs LLVM 21, so openembedded-core from `wrynose` on.
 
-Built end to end against openembedded-core master with LLVM 22.1.8: 1035 tasks,
-all succeeded, and the resulting binary runs and carries the distribution's
-hardening flags. [meta-cminus/README.md](meta-cminus/README.md) lists the four
-problems that only surfaced once the tasks actually ran.
+Built end to end against openembedded-core master with LLVM 22.1.8, for both
+`qemux86-64` and `qemuarm64`: 1035 tasks each, all succeeded, and the binaries
+run under emulation carrying the distribution's hardening flags. Putting the
+package into a full image is the one step left untested.
+[meta-cminus/README.md](meta-cminus/README.md) has what the real build caught
+that reading the recipes could not.
 
 ## Tests
 
