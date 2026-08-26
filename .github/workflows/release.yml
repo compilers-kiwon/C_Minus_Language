@@ -65,10 +65,18 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           NAME="cmc-${TAG}-linux-x86_64"
 
+          # README.md spells the archive name out, and a copy of it travels
+          # inside the archive. Left stale it tells its own reader to download
+          # a file this release does not have, so refuse to build one.
+          grep -q "$NAME" README.md || {
+            echo "README.md does not mention $NAME; bump the download commands"
+            exit 1
+          }
+
           mkdir -p "dist/$NAME/bin" "dist/$NAME/lib"
           cp build/cmc              "dist/$NAME/bin/"
           cp build/libcminus_rt.a   "dist/$NAME/lib/"
-          cp -r runtime examples docs README.md "dist/$NAME/"
+          cp -r runtime examples docs README.md LICENSE "dist/$NAME/"
           strip "dist/$NAME/bin/cmc"
 
           tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
