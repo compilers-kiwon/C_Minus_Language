@@ -353,9 +353,9 @@ where the build runs, while the runtime is linked into programs for the device.
 Needs LLVM 21, so openembedded-core from `wrynose` on.
 
 Built end to end against openembedded-core master with LLVM 22.1.8, for both
-`qemux86-64` and `qemuarm64`: 1035 tasks each, all succeeded, and the binaries
-run under emulation carrying the distribution's hardening flags. Putting the
-package into a full image is the one step left untested.
+`qemux86-64` and `qemuarm64`: the binaries run under emulation carrying the
+distribution's hardening flags, and `core-image-minimal` for `qemux86-64`
+lists `cminus-hello` in its rootfs manifest.
 [meta-cminus/README.md](meta-cminus/README.md) has what the real build caught
 that reading the recipes could not.
 

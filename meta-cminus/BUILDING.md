@@ -110,7 +110,28 @@ To put the program in an image instead, add to `local.conf`:
 IMAGE_INSTALL:append = " cminus-hello"
 ```
 
-and build `core-image-minimal`.
+and build `core-image-minimal`. It then appears in the rootfs manifest:
+
+```
+$ grep cminus-hello tmp/deploy/images/qemux86-64/*.manifest
+core-image-minimal-qemux86-64.rootfs.manifest:cminus-hello x86-64-v3 1.0-r0
+```
+
+## After an interrupted build
+
+Two things bite, and neither announces itself.
+
+A half-finished git clone under `downloads/` survives `rm -rf tmp`, and
+deleting the clone is not enough on its own: the `do_fetch` stamp still says
+the source is there, so BitBake skips to `do_unpack` and fails with
+`clone directory not available or not up to date`. `bitbake -c cleanall
+<recipe>` clears workdir, sstate, download and stamp together.
+
+Separately, `oe-init-build-env` takes the BitBake directory as its *second*
+argument and exports it. One mistyped invocation therefore leaves a bad
+`BITBAKEDIR` in the shell, and every later attempt inherits it and fails the
+same way even after the command is corrected. A new terminal is the quickest
+cure.
 
 ## Another architecture
 

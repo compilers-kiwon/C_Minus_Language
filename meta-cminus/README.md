@@ -79,14 +79,17 @@ Package: cminus-hello   Architecture: cortexa57   Depends: libc6 (>= 2.44+git...
 Stripped, with the symbols split into `-dbg`, and the libc dependency detected
 automatically.
 
-**Not verified: the rootfs assembly.** `IMAGE_INSTALL:append = " cminus-hello"`
-followed by `bitbake core-image-minimal` was attempted five times and never
-finished, for reasons outside the layer: an out-of-memory kill from
-over-parallel settings, then the build host tearing the environment down
-mid-task, then a pseudo database left inconsistent by those kills. Assembling
-a rootfs is openembedded-core's own machinery rather than anything this layer
-supplies, and the package it would consume is checked above -- but that is an
-argument, not a test, and it is recorded here as untested.
+It reaches an image too. With `IMAGE_INSTALL:append = " cminus-hello"`,
+`bitbake core-image-minimal` for `qemux86-64` puts it in the rootfs:
+
+```
+$ grep cminus-hello tmp/deploy/images/qemux86-64/*.manifest
+core-image-minimal-qemux86-64.rootfs.manifest:cminus-hello x86-64-v3 1.0-r0
+```
+
+The image was built for `qemux86-64` only. The `qemuarm64` one stops inside
+openembedded-core rather than here: `procps` 4.0.7 fails to link for aarch64
+against the GCC 16 that master currently carries.
 
 Four things only the real build could find, in the order they appeared:
 
