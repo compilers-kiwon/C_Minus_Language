@@ -115,6 +115,20 @@ jobs:
           sudo sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
           sudo locale-gen
 
+      # oe-core forks a child, unshares, and checks the uid comes back
+      # (meta/lib/oe/sanity.py, check_userns). Ubuntu 24.04 restricts
+      # unprivileged user namespaces through AppArmor, so the uid does not come
+      # back and the check is fatal. The runner image carries the restriction;
+      # a kernel without the knob at all, as under WSL, never sees this.
+      - name: Let BitBake use user namespaces
+        run: |
+          set -euxo pipefail
+          knob=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -e "$knob" ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          unshare --user --map-root-user true
+
       - name: Fetch BitBake and openembedded-core
         run: |
           set -euxo pipefail
