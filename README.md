@@ -350,7 +350,8 @@ will not start without an `en_US.UTF-8` locale.
 
 The split into three follows from Yocto cross-compiling everything: `cmc` runs
 where the build runs, while the runtime is linked into programs for the device.
-Needs LLVM 21, so openembedded-core from `wrynose` on.
+Needs LLVM 21, which rules out `walnascar` and older. The layer declares
+`blacksail` alone, the series it was built against.
 
 Built end to end against openembedded-core master with LLVM 22.1.8, for both
 `qemux86-64` and `qemuarm64`: the binaries run under emulation carrying the

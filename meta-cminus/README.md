@@ -33,9 +33,13 @@ useless, and no build system hands one over any other way.
 
 ## Requirements
 
-LLVM 21 or newer, so openembedded-core from `wrynose` onwards.  `walnascar`
-carries LLVM 20.1 and the recipe will fail its version floor, which is why
-`LAYERSERIES_COMPAT` names only the series that can work.
+LLVM 21 or newer. `walnascar` carries 20.1, so the recipe configures and then
+fails its version floor; every older series fails the same way.
+
+`LAYERSERIES_COMPAT` names `blacksail` alone, which is narrower than that floor
+and deliberately so. `wrynose` carries LLVM 22 and would very likely build, but
+nothing here has been run against it, and this layer declares what was verified
+rather than what ought to work. Add it once a build says so.
 
 ## Use
 
