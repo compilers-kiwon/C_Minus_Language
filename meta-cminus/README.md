@@ -107,3 +107,8 @@ The last one showed up in variable expansion, the rest only when tasks ran.
 `SRCREV` pins the revision that was verified rather than a moving tag. To move
 it, set it to a pushed commit that contains `CMINUS_BUILD_COMPILER`,
 `CMINUS_BUILD_RUNTIME` and `LICENSE`, and rerun `bitbake cminus-hello`.
+
+`PV` describes the pinned revision, not the branch tip, so it moves with
+`SRCREV` and not with a release. The pin currently sits between v0.1.2 and
+v0.1.3, which changed nothing either recipe builds; chasing the newer tag
+would advertise an upgrade over identical source and rebuild it to prove it.

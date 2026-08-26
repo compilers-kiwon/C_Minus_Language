@@ -19,8 +19,8 @@ Three ways in, depending on what you want.
 24.04's, since LLVM itself is linked in.
 
 ```bash
-curl -sSLO https://github.com/compilers-kiwon/C_Minus_Language/releases/latest/download/cmc-v0.1.2-linux-x86_64.tar.gz
-tar -xzf cmc-v0.1.2-linux-x86_64.tar.gz && cd cmc-v0.1.2-linux-x86_64
+curl -fsSLO https://github.com/compilers-kiwon/C_Minus_Language/releases/latest/download/cmc-v0.1.3-linux-x86_64.tar.gz
+tar -xzf cmc-v0.1.3-linux-x86_64.tar.gz && cd cmc-v0.1.3-linux-x86_64
 bin/cmc -O2 examples/gcd.cm -o gcd && echo "270 192" | ./gcd
 ```
 
