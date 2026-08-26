@@ -106,7 +106,11 @@ jobs:
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gawk diffstat chrpath cpio zstd lz4 file locales
+            gawk diffstat chrpath cpio zstd lz4 file locales \
+            rpcsvc-proto
+          # rpcsvc-proto is there for rpcgen, which BitBake lists in HOSTTOOLS
+          # and no base Ubuntu carries. A missing entry in that list aborts the
+          # first bitbake command a second in, before this layer is read at all.
           # BitBake refuses to start without this one.
           sudo sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
           sudo locale-gen
@@ -118,32 +122,26 @@ jobs:
           git clone --depth 1 https://git.openembedded.org/bitbake
           git clone --depth 1 https://git.openembedded.org/openembedded-core
 
+      # The checks live in a script so that a failure here can be reproduced
+      # locally by running the same thing. Workflow logs need a sign-in to
+      # read, so every error is repeated as an annotation, which the checks
+      # API serves to anyone.
       - name: Parse the layer and check what it resolves to
         run: |
-          set -eo pipefail
-          cd oe
-          export BITBAKEDIR="$PWD/bitbake"
-          source openembedded-core/oe-init-build-env build > /dev/null
-          echo 'SANITY_TESTED_DISTROS = ""' >> conf/local.conf
-          bitbake-layers add-layer "$GITHUB_WORKSPACE/cminus/meta-cminus"
-
-          bitbake -p
-
-          for r in cmc-native cminus-runtime cminus-hello; do
-            bitbake -e "$r" > "/tmp/$r.env"
-            grep -q "^PN=\"$r\"" "/tmp/$r.env"
-          done
-
-          # The compiler is native and needs LLVM; the runtime is neither.
-          grep -q 'DEPENDS=.*llvm-native'          /tmp/cmc-native.env
-          grep -q 'CLASSOVERRIDE="class-native"'   /tmp/cmc-native.env
-          grep -q 'CMINUS_BUILD_COMPILER=OFF'      /tmp/cminus-runtime.env
-
-          # The example must hand the driver a command and the distro's link
-          # flags; without the latter package QA rejects the binary.
-          sed -n '/^do_compile()/,/^}/p' /tmp/cminus-hello.env > /tmp/hello.sh
-          grep -q -- '--cc "'      /tmp/hello.sh
-          grep -q 'hash-style=gnu' /tmp/hello.sh
+          set -o pipefail
+          rc=0
+          bash cminus/.github/scripts/yocto-layer-check.sh \
+            "$GITHUB_WORKSPACE/cminus/meta-cminus" "$GITHUB_WORKSPACE/oe" \
+            2>&1 | tee parse.log || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            # BitBake puts the interesting part -- which tool, which recipe --
+            # on the lines after the one saying ERROR, so carry them along.
+            grep -E -A2 '^(ERROR|Error|.*: error:)' parse.log |
+              grep -v '^--$' | head -9 |
+              while IFS= read -r line; do echo "::error::$line"; done
+            echo "::error::yocto-layer-check.sh exited $rc"
+            exit "$rc"
+          fi
 
   sanitizers:
     name: ASan + UBSan

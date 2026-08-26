@@ -9,7 +9,18 @@ source, and so is the cross toolchain.
 BitBake needs a handful of tools beyond a normal build environment:
 
 ```bash
-sudo apt install -y git python3 gawk wget diffstat chrpath cpio zstd lz4 file
+sudo apt install -y git python3 gawk wget diffstat chrpath cpio zstd lz4 file \
+                    rpcsvc-proto
+```
+
+`rpcsvc-proto` is there for `rpcgen`. BitBake lists it in `HOSTTOOLS`, and a
+missing entry in that list stops the very first `bitbake` command a second in,
+with the layer never read:
+
+```
+ERROR: The following required tools (as specified by HOSTTOOLS) appear to be
+unavailable in PATH, please install them in order to proceed:
+  rpcgen
 ```
 
 ## 2. Locale
