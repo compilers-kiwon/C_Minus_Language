@@ -11,6 +11,14 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/TargetParser/Triple.h"
+
+#if defined(CMINUS_HAVE_MLIR)
+#include "llvm/Support/raw_ostream.h"
+#include "mlir/IR/MLIRContext.h"
+
+#include "cminus/MLIRGen.h"
+#endif
 
 #include "cminus/AST.h"
 #include "cminus/Diagnostic.h"
@@ -44,7 +52,7 @@ int mainExecutableAnchor = 0;
 enum class Stage { Scan, Parse, Analyze, Emit };
 
 /// What the compiler should leave behind.
-enum class OutputKind { Executable, Object, LLVMIR };
+enum class OutputKind { Executable, Object, LLVMIR, MLIR };
 
 struct Options {
   std::string inputPath;
@@ -60,6 +68,9 @@ struct Options {
   bool dumpSymbols = false;
   unsigned optLevel = 0;
   bool indexChecks = true;
+  bool useMLIR = false;
+  bool mlirCMinus = false; // --use-mlir=cminus rather than std
+  bool printMLIRAfterAll = false;
   bool saveTemps = false;
   bool verbose = false;
   std::string driver;
@@ -107,6 +118,17 @@ void printUsage(std::ostream &os, const char *argv0) {
      << "  --dump-ast        Print the parse tree and stop\n"
      << "  --dump-symbols    Print the symbol table and stop\n"
      << "\n"
+#if defined(CMINUS_HAVE_MLIR)
+     << "MLIR (host target only):\n"
+     << "  --use-mlir[=std|cminus]\n"
+     << "                    Generate code through MLIR: straight to the\n"
+     << "                    func/arith/cf/memref dialects (std, the default)\n"
+     << "                    or through the cminus dialect\n"
+     << "  --emit-mlir       Write the MLIR the generator made and stop\n"
+     << "  --mlir-print-ir-after-all\n"
+     << "                    Print the module to stderr after every lowering pass\n"
+     << "\n"
+#endif
      << "Other:\n"
      << "  -fno-index-check  Omit the negative-subscript checks\n"
      << "  --color           Force colored diagnostics\n"
@@ -294,6 +316,28 @@ int main(int argc, char **argv) {
       opts.verbose = true;
     } else if (arg == "-fno-index-check") {
       opts.indexChecks = false;
+    } else if (arg == "--use-mlir" || arg.rfind("--use-mlir=", 0) == 0 ||
+               arg == "--emit-mlir" || arg == "--mlir-print-ir-after-all") {
+#if !defined(CMINUS_HAVE_MLIR)
+      std::cerr << "cmc: error: '" << arg
+                << "' needs a cmc built with -DCMINUS_ENABLE_MLIR=ON\n";
+      return 2;
+#else
+      opts.useMLIR = true;
+      if (arg == "--emit-mlir") {
+        opts.output = OutputKind::MLIR;
+      } else if (arg == "--mlir-print-ir-after-all") {
+        opts.printMLIRAfterAll = true;
+      } else if (arg == "--use-mlir=cminus") {
+        opts.mlirCMinus = true;
+      } else if (arg == "--use-mlir" || arg == "--use-mlir=std") {
+        opts.mlirCMinus = false;
+      } else {
+        std::cerr << "cmc: error: unknown MLIR generator in '" << arg
+                  << "' (expected std or cminus)\n";
+        return 2;
+      }
+#endif
     } else if (arg == "--color") {
       opts.useColor = true;
       opts.colorForced = true;
@@ -379,6 +423,11 @@ int main(int argc, char **argv) {
     std::cerr << '\n';
   }
 
+  if (opts.useMLIR && crossing) {
+    std::cerr << "cmc: error: the MLIR path supports only the host target\n";
+    return 1;
+  }
+
   if (opts.output == OutputKind::Executable && crossing &&
       !checkCrossLinkInputs(opts, opts.targetTriple, error)) {
     std::cerr << "cmc: error: " << error << '\n';
@@ -387,16 +436,64 @@ int main(int argc, char **argv) {
 
   // --- generate
   llvm::LLVMContext context;
-  cminus::IRGenOptions irOptions;
-  irOptions.moduleName = opts.inputPath;
-  irOptions.indexChecks = opts.indexChecks;
-  irOptions.targetTriple = target->triple();
-  irOptions.dataLayout = target->dataLayout();
+  std::unique_ptr<llvm::Module> module;
+#if defined(CMINUS_HAVE_MLIR)
+  if (opts.useMLIR) {
+    if (opts.mlirCMinus) {
+      std::cerr << "cmc: error: --use-mlir=cminus is not implemented yet\n";
+      return 1;
+    }
 
-  std::unique_ptr<llvm::Module> module =
-      cminus::generateIR(*program, context, diags, irOptions);
-  if (!module || diags.hasErrors())
-    return finish(diags, opts.useColor);
+    mlir::MLIRContext mlirContext;
+    cminus::loadMLIRDialects(mlirContext);
+    cminus::MLIRGenOptions mlirOptions;
+    mlirOptions.moduleName = opts.inputPath;
+    mlirOptions.indexChecks = opts.indexChecks;
+
+    mlir::OwningOpRef<mlir::ModuleOp> mlirModule =
+        cminus::generateStdMLIR(*program, mlirContext, diags, mlirOptions);
+    if (!mlirModule || diags.hasErrors())
+      return finish(diags, opts.useColor);
+
+    if (opts.output == OutputKind::MLIR) {
+      const std::string path = opts.outputPath.empty() ? "-" : opts.outputPath;
+      std::error_code ec;
+      llvm::raw_fd_ostream os(path, ec);
+      if (ec) {
+        std::cerr << "cmc: error: cannot write '" << path
+                  << "': " << ec.message() << '\n';
+        return 1;
+      }
+      mlirModule->print(os);
+      return finish(diags, opts.useColor);
+    }
+
+    module = cminus::lowerMLIRToLLVM(
+        *mlirModule,
+        opts.mlirCMinus ? cminus::MLIRFlavor::CMinus : cminus::MLIRFlavor::Std,
+        context, opts.printMLIRAfterAll, error);
+    if (!module) {
+      std::cerr << "cmc: error: " << error << '\n';
+      return 1;
+    }
+    // What IRGenerator stamps on its module before generating anything.
+    module->setModuleIdentifier(opts.inputPath);
+    module->setSourceFileName(opts.inputPath);
+    module->setTargetTriple(llvm::Triple(target->triple()));
+    module->setDataLayout(target->dataLayout());
+  } else
+#endif
+  {
+    cminus::IRGenOptions irOptions;
+    irOptions.moduleName = opts.inputPath;
+    irOptions.indexChecks = opts.indexChecks;
+    irOptions.targetTriple = target->triple();
+    irOptions.dataLayout = target->dataLayout();
+
+    module = cminus::generateIR(*program, context, diags, irOptions);
+    if (!module || diags.hasErrors())
+      return finish(diags, opts.useColor);
+  }
 
   if (!cminus::optimizeModule(*module, opts.optLevel, error)) {
     std::cerr << "cmc: error: " << error << '\n';
@@ -410,6 +507,7 @@ int main(int argc, char **argv) {
     case OutputKind::Executable: output = "a.out"; break;
     case OutputKind::Object:     output = replaceExtension(opts.inputPath, ".o"); break;
     case OutputKind::LLVMIR:     output = "-"; break;
+    case OutputKind::MLIR:       output = "-"; break;
     }
   }
 
@@ -423,6 +521,10 @@ int main(int argc, char **argv) {
     break;
   case OutputKind::Executable:
     written = buildExecutable(*module, *target, opts, argv[0], output, error);
+    break;
+  case OutputKind::MLIR:
+    // Written as soon as it was generated; never reaches here.
+    written = true;
     break;
   }
   if (!written) {

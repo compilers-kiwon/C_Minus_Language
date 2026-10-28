@@ -17,6 +17,9 @@
 #   CMC=build/cmc tests/run_exec_tests.sh            # check
 #   CMC=build/cmc tests/run_exec_tests.sh --update   # record the .expected files
 #
+# CMC_FLAGS adds arguments to every cmc invocation (e.g. --use-mlir=std), and
+# EXEC_CASES limits the run to the named cases (e.g. "gcd sort").
+#
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +49,8 @@ CMINUS_RT="$(cd "$(dirname "$CMINUS_RT")" && pwd)/$(basename "$CMINUS_RT")"
 CMC_CC_ARGS=()
 [[ -n "${CC:-}" ]] && CMC_CC_ARGS=(--cc "$CC")
 LINK_CC="${CC:-cc}"
+
+read -r -a CMC_EXTRA <<< "${CMC_FLAGS:-}"
 
 update=0
 [[ "${1:-}" == "--update" ]] && update=1
@@ -79,7 +84,7 @@ build_linked() {
   local name="$1"
   local level="$2"
   local exe="$work/$name$level"
-  if ! "$CMC" "$level" "${CMC_CC_ARGS[@]}" --runtime "$CMINUS_RT" \
+  if ! "$CMC" "$level" "${CMC_EXTRA[@]}" "${CMC_CC_ARGS[@]}" --runtime "$CMINUS_RT" \
        "$name.cm" -o "$exe" 2>&1; then
     echo "cmc failed"
     return
@@ -92,7 +97,7 @@ build_via_object() {
   local name="$1"
   local obj="$work/$name.sep.o"
   local exe="$work/$name.sep"
-  if ! "$CMC" -c "$name.cm" -o "$obj" 2>&1; then
+  if ! "$CMC" -c "${CMC_EXTRA[@]}" "$name.cm" -o "$obj" 2>&1; then
     echo "cmc -c failed"
     return
   fi
@@ -104,7 +109,12 @@ build_via_object() {
 }
 
 shopt -s nullglob
-for src in *.cm; do
+sources=(*.cm)
+if [[ -n "${EXEC_CASES:-}" ]]; then
+  read -r -a names <<< "$EXEC_CASES"
+  sources=("${names[@]/%/.cm}")
+fi
+for src in "${sources[@]}"; do
   name="${src%.cm}"
   expected="$name.expected"
 

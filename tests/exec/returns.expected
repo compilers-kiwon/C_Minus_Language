@@ -1,0 +1,18 @@
+returns.cm:3:5: warning: control may reach the end of non-void function 'firstAbove' without returning a value
+  int firstAbove(int limit)
+      ^
+returns.cm:19:5: warning: control may reach the end of non-void function 'noReturn' without returning a value
+  int noReturn(int x)
+      ^
+2 warnings generated.
+8
+-1
+0
+1
+42
+0
+4
+3
+1
+-9
+exit status: 0

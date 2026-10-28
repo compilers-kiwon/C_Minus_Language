@@ -27,6 +27,9 @@ option(CMINUS_SANITIZERS "Build with the address and undefined-behaviour sanitiz
 # compiler half needs LLVM.
 option(CMINUS_BUILD_COMPILER "Build the cmc compiler (requires LLVM)" ON)
 option(CMINUS_BUILD_RUNTIME "Build libcminus_rt for the current toolchain" ON)
+# A second code generator that goes through MLIR, for learning MLIR; off by
+# default so that nothing else depends on it.
+option(CMINUS_ENABLE_MLIR "Add the MLIR path to cmc (--use-mlir; requires MLIR)" OFF)
 
 if(NOT CMINUS_BUILD_COMPILER AND NOT CMINUS_BUILD_RUNTIME)
   message(FATAL_ERROR
@@ -51,10 +54,17 @@ if(CMINUS_BUILD_COMPILER)
   message(STATUS "Using LLVM ${LLVM_PACKAGE_VERSION} from ${LLVM_DIR}")
   list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 
-  # Every back end LLVM was built with, not just the host's, so that --target
-  # can name any of them. This is most of cmc's size.
-  llvm_map_components_to_libnames(CMINUS_LLVM_LIBS
-    core support passes ${LLVM_TARGETS_TO_BUILD})
+  # The MLIR libraries link against the LLVM they were built with. When that
+  # is the shared libLLVM, cmc has to use it too, or LLVM's static registries
+  # (command-line options, targets) end up in the process twice.
+  if(CMINUS_ENABLE_MLIR AND LLVM_LINK_LLVM_DYLIB)
+    set(CMINUS_LLVM_LIBS LLVM)
+  else()
+    # Every back end LLVM was built with, not just the host's, so that
+    # --target can name any of them. This is most of cmc's size.
+    llvm_map_components_to_libnames(CMINUS_LLVM_LIBS
+      core support passes ${LLVM_TARGETS_TO_BUILD})
+  endif()
 
   add_executable(cmc
     src/main.cpp
@@ -76,6 +86,23 @@ if(CMINUS_BUILD_COMPILER)
   separate_arguments(CMINUS_LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
   target_compile_definitions(cmc PRIVATE ${CMINUS_LLVM_DEFINITIONS})
   target_link_libraries(cmc PRIVATE ${CMINUS_LLVM_LIBS})
+
+  if(CMINUS_ENABLE_MLIR)
+    find_package(MLIR REQUIRED CONFIG)
+    message(STATUS "Using MLIR from ${MLIR_DIR}")
+
+    target_sources(cmc PRIVATE src/MLIRLower.cpp src/MLIRStdGen.cpp)
+    target_include_directories(cmc SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS})
+    target_compile_definitions(cmc PRIVATE CMINUS_HAVE_MLIR)
+    target_link_libraries(cmc PRIVATE
+      MLIRIR MLIRPass
+      MLIRArithDialect MLIRControlFlowDialect MLIRFuncDialect
+      MLIRLLVMDialect MLIRMemRefDialect
+      MLIRArithToLLVM MLIRControlFlowToLLVM MLIRFuncToLLVM MLIRMemRefToLLVM
+      MLIRReconcileUnrealizedCasts
+      MLIRBuiltinToLLVMIRTranslation MLIRLLVMToLLVMIRTranslation
+      MLIRTargetLLVMIRExport)
+  endif()
 
   if(MSVC)
     target_compile_options(cmc PRIVATE /W4 /permissive-)
@@ -123,6 +150,16 @@ if(CMINUS_BUILD_COMPILER)
       COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
               CMINUS_RT=$<TARGET_FILE:cminus_rt>
               bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
+    if(CMINUS_ENABLE_MLIR)
+      # The same programs through the MLIR path, so both paths must agree.
+      # Only the cases without arrays until the std generator handles them.
+      add_test(NAME execution-mlir-std
+        COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
+                CMINUS_RT=$<TARGET_FILE:cminus_rt>
+                CMC_FLAGS=--use-mlir=std
+                "EXEC_CASES=arith assign control gcd recursion scope returns"
+                bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
+    endif()
   endif()
   # Skips itself when no cross toolchain or emulator is installed.
   add_test(NAME cross

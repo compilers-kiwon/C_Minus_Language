@@ -1,0 +1,40 @@
+/* Returns from inside loops and branches, statements after a return, and an
+   int function that falls off its end (spec 3.5). */
+int firstAbove(int limit)
+{ int i;
+  i = 0;
+  while (1)
+    { if (i * i > limit) return i;
+      i = i + 1; }
+}
+int sign(int x)
+{ if (x < 0) return 0 - 1;
+  else if (x > 0) return 1;
+  else return 0;
+}
+int dead(int x)
+{ return x + 1;
+  output(999);
+}
+int noReturn(int x)
+{ x = x + 1;
+}
+void early(int n)
+{ while (n > 0)
+    { if (n == 2) return;
+      output(n);
+      n = n - 1; }
+  output(0 - 9);
+}
+void main(void)
+{ output(firstAbove(50));
+  output(sign(0 - 5));
+  output(sign(0));
+  output(sign(7));
+  output(dead(41));
+  output(noReturn(5));
+  early(4);
+  early(1);
+  return;
+  output(12345);
+}
