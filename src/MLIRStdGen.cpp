@@ -3,6 +3,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 #include "cminus/AST.h"
 #include "cminus/Diagnostic.h"
@@ -35,6 +37,7 @@ private:
   // indexErrorFunction, collectLocals and emitFunction.
   //   func.func for each function (main returns i32), func.func private for
   //   input and output, memref.alloca slots at the top of the entry block.
+  void emitFunction(const FunDecl &decl);
 
   // TODO(you): statements -- emitCompound, emitStmt, emitIf, emitWhile and
   // emitReturn, with cf.br / cf.cond_br between blocks. Stop emitting a block
@@ -60,7 +63,8 @@ mlir::OwningOpRef<mlir::ModuleOp> StdGenerator::run(const Program &program) {
   builder_.setInsertionPointToEnd(module_.getBody());
 
   for (const auto &decl : program.decls) {
-    (void)decl; // TODO(you): emit each global variable and function.
+    if (decl->kind == NodeKind::FunDecl)
+      emitFunction(static_cast<const FunDecl &>(*decl));
   }
 
   mlir::OwningOpRef<mlir::ModuleOp> module(module_);
@@ -71,6 +75,30 @@ mlir::OwningOpRef<mlir::ModuleOp> StdGenerator::run(const Program &program) {
     return nullptr;
   }
   return module;
+}
+
+void StdGenerator::emitFunction(const FunDecl &decl) {
+  if (decl.name != "main")
+    return;
+
+  mlir::Location where = loc(decl.loc);
+
+  // (a) 함수 타입 만들기: 입력 없음, 결과 i32 
+  mlir::FunctionType type = builder_.getFunctionType({}, {builder_.getI32Type()});
+
+  // (b) func.func 만들기. 위치는 loc(decl.loc), 이름은 decl.name
+  auto fn = builder_.create<mlir::func::FuncOp>(where, decl.name, type);
+
+  // (c) entry 블록 만들기
+  mlir::Block *entry = fn.addEntryBlock();
+
+  // (d) 커서를 기억해 두고 entry 블록으로 옮기기
+  mlir::OpBuilder::InsertionGuard guard(builder_);
+  builder_.setInsertionPointToStart(entry);
+
+  // (e) 0 상수 만들고 그 값으로 return
+  mlir::Value zero = builder_.create<mlir::arith::ConstantIntOp>(where, builder_.getI32Type(), 0);
+  builder_.create<mlir::func::ReturnOp>(where, mlir::ValueRange{zero});
 }
 
 } // namespace
