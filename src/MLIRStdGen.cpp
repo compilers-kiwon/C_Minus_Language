@@ -8,10 +8,9 @@
 #include "cminus/Diagnostic.h"
 #include "cminus/Symbol.h"
 
-// This file is the learner's half of the MLIR path (see
-// docs/superpowers/plans/2026-10-27-mlir-layer.md, Tasks 3 and 4). It starts
-// as a skeleton that produces an empty module; the TODO(you) notes say what
-// goes where. IRGenerator in IRGen.cpp is the reference for every rule.
+// This file is the learner's half of the MLIR path. It starts as a skeleton
+// that produces an empty module; the TODO(you) notes say what goes where.
+// IRGenerator in IRGen.cpp is the reference for every rule.
 
 namespace cminus {
 
