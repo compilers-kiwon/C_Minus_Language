@@ -6,6 +6,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
@@ -45,10 +46,13 @@ private:
   void emitFunction(const FunDecl &decl);  // 함수 하나: 시그니처 + 몸체
   void collectLocals(const Stmt &stmt, std::vector<const VarDecl *> &out);
   bool blockOpen();                        // 커서가 있는 블록에 아직 종결자가 없는가
+  void startBlock(mlir::Block *block);     // 블록을 함수 끝에 붙이고 커서를 그 안으로 (1-e)
 
   // --- 문장 (1-c). 커서가 있는 블록 끝에 소스 순서대로 붙인다.
   void emitCompound(const CompoundStmt &block);  // { ... }
   void emitStmt(const Stmt &stmt);               // 문장 종류별로 나눠 보내기
+  void emitIf(const IfStmt &stmt);               // if (c) s [else s]   (1-e)
+  void emitWhile(const WhileStmt &stmt);         // while (c) s         (1-e)
   void emitReturn(const ReturnStmt &stmt);       // return; / return e;
 
   // --- 식 (1-c). 피연산자를 먼저 만들고 그 값으로 연산 op를 만든다 (후위 순회).
@@ -56,12 +60,10 @@ private:
   mlir::Value emitAssign(const AssignExpr &expr);  // x = e  (1-d)
   mlir::Value emitBinary(const BinaryExpr &expr);  // + - * / 와 비교
   mlir::Value emitCall(const CallExpr &expr);      // f(a, b)
+  mlir::Value emitCondition(const Expr &expr);     // 참/거짓 판정 → i1  (1-e)
   mlir::Value addressOf(const VarExpr &expr);      // 변수의 저장소(memref<i32>)  (1-d)
   mlir::Value int32(SourceLocation where, long long value);  // i32 상수
   void notYet(SourceLocation where, const char *what);       // 아직 못 만드는 노드
-
-  // TODO(you), 1-e: emitIf, emitWhile and emitCondition, with cf.br /
-  // cf.cond_br between blocks.
 
   // TODO(you), Task 4: arrays -- memref<Nxi32> globals and locals,
   // memref<?xi32> parameters, indexed memref.load / memref.store,
@@ -270,6 +272,17 @@ bool StdGenerator::blockOpen() {
   return block && !block->mightHaveTerminator();
 }
 
+void StdGenerator::startBlock(mlir::Block *block) {
+  // if/while는 블록을 `new mlir::Block`으로 먼저 만들어 둔다. 분기(cf.br)가
+  // 아직 채우지 않은 블록도 가리킬 수 있어야 하기 때문이다. 이 블록들은
+  // 아직 어느 region에도 속하지 않는다. 채울 차례가 되면 함수 region의 끝에
+  // 붙이고(region이 소유권을 가져간다) 커서를 그 블록 안으로 옮긴다.
+  // 그래서 블록이 놓이는 순서가 소스 순서와 같아진다.
+  // IRGen.cpp가 if.end를 분리된 채 만들었다가 나중에 insert하는 것과 같은 방식이다.
+  function_.getBody().push_back(block);
+  builder_.setInsertionPointToEnd(block);
+}
+
 // ------------------------------------------------------------------ 문장
 
 void StdGenerator::emitCompound(const CompoundStmt &block) {
@@ -295,15 +308,84 @@ void StdGenerator::emitStmt(const Stmt &stmt) {
   case NodeKind::ReturnStmt:
     emitReturn(static_cast<const ReturnStmt &>(stmt));
     break;
-  case NodeKind::IfStmt:                   // 1-e
-    notYet(stmt.loc, "if statements");
+  case NodeKind::IfStmt:
+    emitIf(static_cast<const IfStmt &>(stmt));
     break;
-  case NodeKind::WhileStmt:                // 1-e
-    notYet(stmt.loc, "while statements");
+  case NodeKind::WhileStmt:
+    emitWhile(static_cast<const WhileStmt &>(stmt));
     break;
   default:
     break;
   }
+}
+
+void StdGenerator::emitIf(const IfStmt &stmt) {
+  mlir::Location where = loc(stmt.loc);
+
+  //   (지금 블록)  조건 계산; cf.cond_br %c, ^then, ^else(없으면 ^end)
+  //   ^then:       then 문장; cf.br ^end
+  //   ^else:       else 문장; cf.br ^end
+  //   ^end:        if 다음 문장들이 여기에 이어진다
+  mlir::Value cond = emitCondition(*stmt.cond);
+  auto *thenBlock = new mlir::Block();
+  auto *elseBlock = stmt.elseStmt ? new mlir::Block() : nullptr;
+  auto *endBlock = new mlir::Block();
+  builder_.create<mlir::cf::CondBranchOp>(where, cond, thenBlock,
+                                          elseBlock ? elseBlock : endBlock);
+  // cond_br가 지금 블록의 종결자다. 이제 이 블록은 닫혔다.
+
+  startBlock(thenBlock);
+  if (stmt.thenStmt)
+    emitStmt(*stmt.thenStmt);
+  // then 안에서 return했으면 블록이 이미 닫혀 있다. 열려 있을 때만 end로 간다.
+  // (then 안에 if/while이 있었다면 커서는 그 안쪽의 ^end에 있고, 거기서 이어간다.)
+  if (blockOpen())
+    builder_.create<mlir::cf::BranchOp>(where, endBlock);
+
+  if (elseBlock) {
+    startBlock(elseBlock);
+    emitStmt(*stmt.elseStmt);
+    if (blockOpen())
+      builder_.create<mlir::cf::BranchOp>(where, endBlock);
+  }
+
+  // 두 갈래가 모두 return하면 ^end로 오는 분기가 없다. IRGen.cpp는 그래도
+  // if.end를 붙여 뒤따르는 죽은 문장을 거기에 놓지만, 여기서는 블록을 버린다.
+  // 아무도 오지 않는 블록 안의 func.return은 convert-func-to-llvm이 변환하지
+  // 않고 남겨 lowering이 실패하기 때문이다 (gcd.cm에서 관찰).
+  // 커서는 닫힌 블록에 남으므로 blockOpen()이 false가 되고, 바깥의
+  // emitCompound가 if 뒤의 죽은 문장을 건너뛴다. return 뒤와 같은 처리다.
+  if (endBlock->hasNoPredecessors()) {
+    delete endBlock;
+    return;
+  }
+  startBlock(endBlock);
+}
+
+void StdGenerator::emitWhile(const WhileStmt &stmt) {
+  mlir::Location where = loc(stmt.loc);
+
+  //   (지금 블록)  cf.br ^cond
+  //   ^cond:       조건 계산; cf.cond_br %c, ^body, ^end
+  //   ^body:       몸체 문장; cf.br ^cond       ← 뒤로 가는 분기 = 루프
+  //   ^end:        while 다음 문장들
+  // 조건은 반복마다 다시 계산해야 하므로 별도 블록 ^cond에 둔다.
+  auto *condBlock = new mlir::Block();
+  auto *bodyBlock = new mlir::Block();
+  auto *endBlock = new mlir::Block();
+  builder_.create<mlir::cf::BranchOp>(where, condBlock);
+
+  startBlock(condBlock);
+  mlir::Value cond = emitCondition(*stmt.cond);
+  builder_.create<mlir::cf::CondBranchOp>(where, cond, bodyBlock, endBlock);
+
+  startBlock(bodyBlock);
+  if (stmt.body)
+    emitStmt(*stmt.body);
+  if (blockOpen())
+    builder_.create<mlir::cf::BranchOp>(where, condBlock);
+
+  startBlock(endBlock);
 }
 
 void StdGenerator::emitReturn(const ReturnStmt &stmt) {
@@ -446,6 +528,15 @@ mlir::Value StdGenerator::emitCall(const CallExpr &expr) {
   // void 함수 호출은 결과가 없다. 의미 분석이 void 값을 쓰는 식을 막으므로
   // 빈 Value는 ExprStmt나 void 함수의 return처럼 값을 버리는 곳으로만 간다.
   return call.getNumResults() ? call.getResult(0) : mlir::Value();
+}
+
+mlir::Value StdGenerator::emitCondition(const Expr &expr) {
+  // spec 3.5: 0이 아니면 참. cf.cond_br는 i1을 받으므로 `값 != 0`으로 바꾼다.
+  // 조건이 비교식이면 cmpi → extui → cmpi ne 0이 되어 장황하지만,
+  // 최적화(canonicalize, LLVM instcombine)가 정리한다. IRGen.cpp도 같다.
+  mlir::Value value = emitExpr(expr);
+  return builder_.create<mlir::arith::CmpIOp>(
+      loc(expr.loc), mlir::arith::CmpIPredicate::ne, value, int32(expr.loc, 0));
 }
 
 mlir::Value StdGenerator::int32(SourceLocation where, long long value) {
