@@ -117,7 +117,7 @@ if(CMINUS_BUILD_COMPILER)
       MLIRArithDialect MLIRControlFlowDialect MLIRFuncDialect
       MLIRLLVMDialect MLIRMemRefDialect
       MLIRArithToLLVM MLIRControlFlowToLLVM MLIRFuncToLLVM MLIRMemRefToLLVM
-      MLIRReconcileUnrealizedCasts
+      MLIRReconcileUnrealizedCasts MLIRTransformUtils
       MLIRBuiltinToLLVMIRTranslation MLIRLLVMToLLVMIRTranslation
       MLIRTargetLLVMIRExport)
   endif()
