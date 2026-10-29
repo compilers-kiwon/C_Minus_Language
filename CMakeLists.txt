@@ -107,10 +107,10 @@ if(CMINUS_BUILD_COMPILER)
     add_dependencies(cmc CMinusOpsIncGen)
 
     target_sources(cmc PRIVATE
-      src/CMinusDialect.cpp src/CMinusToCF.cpp src/MLIRCMinusGen.cpp
-      src/MLIRLower.cpp src/MLIRStdGen.cpp)
-    target_include_directories(cmc PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-    target_include_directories(cmc SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS})
+      src/CMinusDialect.cpp src/CMinusToCF.cpp src/MLIRGen.cpp src/MLIRLower.cpp)
+    # SYSTEM: the generated .inc files trip -Wunused-parameter, as MLIR's own do.
+    target_include_directories(cmc SYSTEM PRIVATE
+      ${CMAKE_CURRENT_BINARY_DIR} ${MLIR_INCLUDE_DIRS})
     target_compile_definitions(cmc PRIVATE CMINUS_HAVE_MLIR)
     target_link_libraries(cmc PRIVATE
       MLIRIR MLIRPass
