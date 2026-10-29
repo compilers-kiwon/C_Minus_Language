@@ -157,7 +157,6 @@ if(CMINUS_BUILD_COMPILER)
         COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
                 CMINUS_RT=$<TARGET_FILE:cminus_rt>
                 CMC_FLAGS=--use-mlir=std
-                "EXEC_CASES=arith assign control gcd recursion scope returns"
                 bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
     endif()
   endif()

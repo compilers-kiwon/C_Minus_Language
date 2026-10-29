@@ -8,9 +8,11 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/Verifier.h"
 
 #include "cminus/AST.h"
@@ -61,14 +63,13 @@ private:
   mlir::Value emitBinary(const BinaryExpr &expr);  // + - * / 와 비교
   mlir::Value emitCall(const CallExpr &expr);      // f(a, b)
   mlir::Value emitCondition(const Expr &expr);     // 참/거짓 판정 → i1  (1-e)
-  mlir::Value addressOf(const VarExpr &expr);      // 변수의 저장소(memref<i32>)  (1-d)
+  /// 변수의 저장소(memref)를 돌려주고, a[i]이면 첨자를 indices에 넣는다.
+  mlir::Value addressOf(const VarExpr &expr,
+                        llvm::SmallVectorImpl<mlir::Value> &indices);
+  mlir::Value storageOf(const Symbol &symbol, SourceLocation where);  // 첨자 없는 저장소
+  mlir::MemRefType storageType(const Symbol &symbol);  // memref<i32>, <Nxi32>, <?xi32>
+  void checkIndex(mlir::Value index, SourceLocation where);  // 음수 첨자 검사 (Task 4)
   mlir::Value int32(SourceLocation where, long long value);  // i32 상수
-  void notYet(SourceLocation where, const char *what);       // 아직 못 만드는 노드
-
-  // TODO(you), Task 4: arrays -- memref<Nxi32> globals and locals,
-  // memref<?xi32> parameters, indexed memref.load / memref.store,
-  // memref.cast for array arguments, and checkIndex calling
-  // __cminus_index_error then llvm.unreachable.
 
   mlir::OpBuilder builder_;   // op를 만드는 "커서 달린 펜"
   DiagnosticEngine &diags_;
@@ -127,25 +128,32 @@ void StdGenerator::declareBuiltins() {
   auto output = builder_.create<mlir::func::FuncOp>(
       where, "output", builder_.getFunctionType(/*inputs=*/{i32}, /*results=*/{}));
   output.setPrivate();                                   // (i32) -> ()
+
+  // 음수 첨자를 만나면 부르는 런타임 함수 (spec 3.6). 돌아오지 않는다.
+  // -fno-index-check이면 부를 일이 없으므로 선언도 하지 않는다.
+  if (options_.indexChecks) {
+    auto indexError = builder_.create<mlir::func::FuncOp>(
+        where, "__cminus_index_error",
+        builder_.getFunctionType(/*inputs=*/{i32}, /*results=*/{}));
+    indexError.setPrivate();                             // (i32) -> ()
+  }
 }
 
 void StdGenerator::emitGlobal(const VarDecl &decl) {
   if (!decl.symbol)
     return;
-  if (decl.isArray) {
-    notYet(decl.loc, "global arrays");     // Task 4
-    return;
-  }
 
-  // 스칼라 전역 = 원소가 하나인 0차원 memref. 지역 변수와 같은 타입이라서
-  // load/store 코드는 전역과 지역을 구분하지 않는다.
-  //   memref.global @x : memref<i32> = dense<0>
-  // 초기값 dense<0>은 "tensor<i32> 모양의 상수 0". C-의 전역은 0으로 시작한다
+  // 스칼라 전역 = 원소가 하나인 0차원 memref, 배열 전역 = 1차원 memref.
+  // 지역 변수와 같은 타입이라서 load/store 코드는 전역과 지역을 구분하지 않는다.
+  //   memref.global @x : memref<i32>   = dense<0>
+  //   memref.global @a : memref<5xi32> = dense<0>
+  // 초기값 dense<0>은 "memref와 같은 모양의 tensor 상수, 모든 원소가 0".
+  // 값을 하나만 주면 모든 원소에 퍼진다(splat). C-의 전역은 0으로 시작한다
   // (IRGen.cpp가 getNullValue로 0을 넣는 것과 같음).
   mlir::Type i32 = builder_.getI32Type();
-  auto type = mlir::MemRefType::get(/*shape=*/{}, i32);
+  mlir::MemRefType type = storageType(*decl.symbol);
   auto zero = mlir::DenseElementsAttr::get(
-      mlir::RankedTensorType::get(/*shape=*/{}, i32),
+      mlir::RankedTensorType::get(type.getShape(), i32),
       llvm::ArrayRef<mlir::Attribute>{builder_.getI32IntegerAttr(0)});
   builder_.create<mlir::memref::GlobalOp>(
       loc(decl.loc), decl.name, /*sym_visibility=*/mlir::StringAttr(), type,
@@ -157,11 +165,14 @@ void StdGenerator::emitFunction(const FunDecl &decl) {
   mlir::Type i32 = builder_.getI32Type();
 
   // (1) 시그니처: IRGen.cpp의 functionFor와 같은 규칙.
-  //     매개변수는 모두 int → i32. (배열 매개변수는 Task 4에서 memref<?xi32>)
+  //     int 매개변수 → i32. 배열 매개변수 → memref<?xi32>: 크기를 모르는
+  //     1차원 배열. 호출하는 쪽의 배열을 그대로 받는다 (참조 전달, spec 3.3).
   llvm::SmallVector<mlir::Type> inputs;
   for (const auto &param : decl.params) {
-    (void)param; // TODO(you), Task 4: param->isArray면 memref<?xi32>
-    inputs.push_back(i32);
+    if (param->isArray)
+      inputs.push_back(mlir::MemRefType::get({mlir::ShapedType::kDynamic}, i32));
+    else
+      inputs.push_back(i32);
   }
   //     결과: void 함수는 결과 없음. 단 main은 C 런타임에 종료 코드를
   //     돌려줘야 하므로 C-에서 void여도 i32.
@@ -187,33 +198,32 @@ void StdGenerator::emitFunction(const FunDecl &decl) {
   // (5) 저장소: 몸체의 어떤 문장보다 먼저, entry 블록 맨 위에 모아 만든다.
   //     루프 안에서 선언된 변수도 여기서 한 번만 할당되어 반복마다 새로
   //     할당되지 않는다 (IRGen.cpp와 같음).
-  auto slotType = mlir::MemRefType::get(/*shape=*/{}, i32);   // memref<i32>
   //  (5a) 매개변수: 블록 인자는 값일 뿐이라 대입할 수 없다. 그래서 슬롯을 만들고
   //       인자를 저장해 둔다. 이후 매개변수 읽기/쓰기는 모두 이 슬롯을 거친다.
+  //       배열 매개변수는 예외: 인자 자체가 이미 memref(저장소)이고, C-에서는
+  //       배열 이름에 대입할 수 없으므로 슬롯 없이 블록 인자를 그대로 쓴다.
   for (unsigned i = 0; i < decl.params.size(); ++i) {
     const ParamDecl &param = *decl.params[i];
     if (!param.symbol)
       continue;
     if (param.isArray) {
-      notYet(param.loc, "array parameters");   // Task 4
+      slots_[param.symbol] = entry->getArgument(i);    // memref<?xi32>
       continue;
     }
-    mlir::Value slot = builder_.create<mlir::memref::AllocaOp>(loc(param.loc), slotType);
+    mlir::Value slot = builder_.create<mlir::memref::AllocaOp>(
+        loc(param.loc), storageType(*param.symbol));    // memref<i32>
     builder_.create<mlir::memref::StoreOp>(loc(param.loc), entry->getArgument(i), slot);
     slots_[param.symbol] = slot;
   }
   //  (5b) 지역 변수: 중첩 블록까지 모두 모아 슬롯을 만든다. 초기값은 없다.
+  //       int x → memref<i32>, int a[4] → memref<4xi32>.
   std::vector<const VarDecl *> locals;
   collectLocals(*decl.body, locals);
   for (const VarDecl *local : locals) {
     if (!local->symbol)
       continue;
-    if (local->isArray) {
-      notYet(local->loc, "local arrays");      // Task 4
-      continue;
-    }
-    slots_[local->symbol] =
-        builder_.create<mlir::memref::AllocaOp>(loc(local->loc), slotType);
+    slots_[local->symbol] = builder_.create<mlir::memref::AllocaOp>(
+        loc(local->loc), storageType(*local->symbol));
   }
 
   // (6) 몸체 문장들. 커서는 entry 블록 안, 슬롯들 뒤에 있다.
@@ -412,12 +422,13 @@ mlir::Value StdGenerator::emitExpr(const Expr &expr) {
   switch (expr.kind) {
   case NodeKind::NumExpr:                  // 42 → arith.constant 42 : i32
     return int32(expr.loc, static_cast<const NumExpr &>(expr).value);
-  case NodeKind::VarExpr: {                // x → memref.load %slot[] : memref<i32>
-    mlir::Value address = addressOf(static_cast<const VarExpr &>(expr));
+  case NodeKind::VarExpr: {                // x    → memref.load %slot[]   : memref<i32>
+                                           // a[i] → memref.load %a[%idx]  : memref<5xi32>
+    llvm::SmallVector<mlir::Value, 1> indices;
+    mlir::Value address = addressOf(static_cast<const VarExpr &>(expr), indices);
     if (!address)
       return int32(expr.loc, 0);
-    return builder_.create<mlir::memref::LoadOp>(loc(expr.loc), address,
-                                                 /*indices=*/mlir::ValueRange{});
+    return builder_.create<mlir::memref::LoadOp>(loc(expr.loc), address, indices);
   }
   case NodeKind::AssignExpr:
     return emitAssign(static_cast<const AssignExpr &>(expr));
@@ -432,36 +443,105 @@ mlir::Value StdGenerator::emitExpr(const Expr &expr) {
 
 /// spec 3.6: 대입은 식이고, 그 값은 저장한 값이다. 그래서 a = b = 3이 된다.
 mlir::Value StdGenerator::emitAssign(const AssignExpr &expr) {
-  // IRGen.cpp와 같은 순서: 주소를 먼저, 값을 나중에.
-  // (스칼라에서는 차이가 없고, Task 4의 a[i] = e에서 인덱스 검사가 먼저 온다.)
-  mlir::Value address = expr.target ? addressOf(*expr.target) : mlir::Value();
+  // IRGen.cpp와 같은 순서: 주소(와 첨자 검사)를 먼저, 값을 나중에.
+  // a[i] = e에서 i가 음수면 e를 계산하기 전에 멈춘다.
+  llvm::SmallVector<mlir::Value, 1> indices;
+  mlir::Value address =
+      expr.target ? addressOf(*expr.target, indices) : mlir::Value();
   mlir::Value value = expr.value ? emitExpr(*expr.value) : int32(expr.loc, 0);
   if (address)
-    builder_.create<mlir::memref::StoreOp>(loc(expr.opLoc), value, address);  // memref.store
+    builder_.create<mlir::memref::StoreOp>(loc(expr.opLoc), value, address,
+                                           indices);                  // memref.store
   return value;
 }
 
-mlir::Value StdGenerator::addressOf(const VarExpr &expr) {
-  // IRGen.cpp의 elementAddress에서 스칼라 부분. 결과는 memref<i32> 하나.
+mlir::Value StdGenerator::addressOf(const VarExpr &expr,
+                                    llvm::SmallVectorImpl<mlir::Value> &indices) {
+  // IRGen.cpp의 elementAddress에 해당한다. 다만 LLVM IR은 원소 하나의 주소
+  // (getelementptr)를 계산하지만, memref는 "저장소 + 첨자"를 load/store에
+  // 따로 넘긴다. 주소 계산은 lowering(finalize-memref-to-llvm)이 만든다.
   const Symbol *symbol = expr.symbol;
   if (!symbol)
     return {};
-  if (expr.index || symbol->isArray()) {
-    notYet(expr.loc, "arrays");            // Task 4
-    return {};
-  }
+  mlir::Value storage = storageOf(*symbol, expr.loc);
+  if (!expr.index)
+    return storage;                        // x: 첨자 없음 → load %x[]
 
-  // 매개변수나 지역 변수: emitFunction이 만들어 둔 슬롯.
-  auto found = slots_.find(symbol);
+  // a[i]: 첨자는 i32 값이다. 먼저 음수인지 검사하고(spec 3.6), memref가
+  // 받는 index 타입으로 바꾼다. index_cast는 부호를 보존해 넓힌다(LLVM의 sext).
+  // 위쪽 경계는 검사하지 않는다 (spec 3.6, IRGen.cpp와 같음).
+  //   %i   = memref.load %islot[] : memref<i32>
+  //   (검사 블록들)
+  //   %idx = arith.index_cast %i : i32 to index
+  mlir::Value index = emitExpr(*expr.index);
+  checkIndex(index, expr.index->loc);
+  indices.push_back(builder_.create<mlir::arith::IndexCastOp>(
+      loc(expr.index->loc), builder_.getIndexType(), index));
+  return storage;
+}
+
+mlir::Value StdGenerator::storageOf(const Symbol &symbol, SourceLocation where) {
+  // 매개변수나 지역 변수: emitFunction이 만들어 둔 슬롯 (배열 매개변수는 블록 인자).
+  auto found = slots_.find(&symbol);
   if (found != slots_.end())
     return found->second;
 
   // 슬롯이 없으면 전역이다. 전역은 모듈에 있고 함수는 IsolatedFromAbove라서
   // 함수 밖의 값을 직접 쓸 수 없다. 이름(@x)으로 그 주소를 꺼내 온다.
   //   %0 = memref.get_global @x : memref<i32>
-  auto type = mlir::MemRefType::get(/*shape=*/{}, builder_.getI32Type());
-  return builder_.create<mlir::memref::GetGlobalOp>(loc(expr.loc), type,
-                                                    symbol->name);
+  //   %1 = memref.get_global @g : memref<5xi32>
+  return builder_.create<mlir::memref::GetGlobalOp>(
+      loc(where), storageType(symbol), symbol.name);
+}
+
+mlir::MemRefType StdGenerator::storageType(const Symbol &symbol) {
+  // IRGen.cpp의 storageType에 해당한다.
+  //   int x           → memref<i32>    (0차원: 원소 하나, 첨자 없음)
+  //   int a[5]        → memref<5xi32>  (크기를 아는 1차원)
+  //   int a[] 매개변수 → memref<?xi32>  (크기를 모르는 1차원)
+  mlir::Type i32 = builder_.getI32Type();
+  if (!symbol.isArray())
+    return mlir::MemRefType::get(/*shape=*/{}, i32);
+  if (symbol.kind == SymbolKind::Parameter)
+    return mlir::MemRefType::get({mlir::ShapedType::kDynamic}, i32);
+  return mlir::MemRefType::get({symbol.arraySize}, i32);
+}
+
+void StdGenerator::checkIndex(mlir::Value index, SourceLocation where) {
+  // IRGen.cpp의 checkIndex와 같은 모양:
+  //   %neg = arith.cmpi slt, %i, %c0 : i32
+  //   cf.cond_br %neg, ^fail, ^ok
+  // ^fail:
+  //   func.call @__cminus_index_error(%i) : (i32) -> ()
+  //   llvm.unreachable                    ← LLVM dialect op를 그대로 섞어 쓴다
+  // ^ok:
+  //   (첨자를 쓰는 load/store가 여기에 이어진다)
+  if (!options_.indexChecks)
+    return;
+  // 음수가 아닌 상수 첨자(a[2])는 검사할 필요가 없다.
+  llvm::APInt constant;
+  if (mlir::matchPattern(index, mlir::m_ConstantInt(&constant)) &&
+      !constant.isNegative())
+    return;
+
+  mlir::Location here = loc(where);
+  mlir::Value negative = builder_.create<mlir::arith::CmpIOp>(
+      here, mlir::arith::CmpIPredicate::slt, index, int32(where, 0));
+  auto *failBlock = new mlir::Block();
+  auto *okBlock = new mlir::Block();
+  builder_.create<mlir::cf::CondBranchOp>(here, negative, failBlock, okBlock);
+
+  // 실패 블록. 런타임 함수가 메시지를 찍고 exit(1)하므로 돌아오지 않는다.
+  // std dialect에는 "여기는 도달하지 않음" 종결자가 없어서 LLVM dialect의
+  // llvm.unreachable을 쓴다. 이미 LLVM dialect이므로 lowering이 건드리지 않는다.
+  startBlock(failBlock);
+  auto indexError =
+      module_.lookupSymbol<mlir::func::FuncOp>("__cminus_index_error");
+  builder_.create<mlir::func::CallOp>(here, indexError, mlir::ValueRange{index});
+  builder_.create<mlir::LLVM::UnreachableOp>(here);
+
+  // 통과 블록에서 원래 식을 이어서 만든다.
+  startBlock(okBlock);
 }
 
 mlir::Value StdGenerator::emitBinary(const BinaryExpr &expr) {
@@ -519,10 +599,29 @@ mlir::Value StdGenerator::emitCall(const CallExpr &expr) {
   }
 
   // 인자도 피연산자: 왼쪽부터 먼저 만든다.
-  // TODO(you), Task 4: 배열 매개변수 자리에는 배열 자체(memref)를 넘긴다.
   llvm::SmallVector<mlir::Value> args;
-  for (const auto &arg : expr.args)
-    args.push_back(emitExpr(*arg));
+  for (unsigned i = 0; i < expr.args.size(); ++i) {
+    const Expr &arg = *expr.args[i];
+    mlir::Type paramType = callee.getArgumentTypes()[i];
+
+    // spec 3.3: 배열 매개변수는 참조 전달이므로 값이 아니라 배열(memref) 자체를
+    // 넘긴다. 의미 분석이 이 자리에 배열 이름만 오도록 보장한다.
+    // 받는 쪽은 memref<?xi32>인데 넘기는 쪽은 memref<5xi32>일 수 있다.
+    // 크기를 잊게 하는 변환이 memref.cast다 (LLVM IR에서는 아무 일도 하지 않는다).
+    //   %g  = memref.get_global @g : memref<5xi32>
+    //   %gc = memref.cast %g : memref<5xi32> to memref<?xi32>
+    // 배열 매개변수를 다시 넘길 때는 이미 memref<?xi32>이므로 그대로 넘긴다.
+    if (mlir::isa<mlir::MemRefType>(paramType) && arg.kind == NodeKind::VarExpr &&
+        static_cast<const VarExpr &>(arg).symbol) {
+      mlir::Value array =
+          storageOf(*static_cast<const VarExpr &>(arg).symbol, arg.loc);
+      if (array.getType() != paramType)
+        array = builder_.create<mlir::memref::CastOp>(loc(arg.loc), paramType, array);
+      args.push_back(array);
+      continue;
+    }
+    args.push_back(emitExpr(arg));
+  }
 
   auto call = builder_.create<mlir::func::CallOp>(where, callee, args);  // func.call @f(...)
   // void 함수 호출은 결과가 없다. 의미 분석이 void 값을 쓰는 식을 막으므로
@@ -543,13 +642,6 @@ mlir::Value StdGenerator::int32(SourceLocation where, long long value) {
   // IRGen.cpp의 int32()처럼 i32로 자른다.
   return builder_.create<mlir::arith::ConstantIntOp>(
       loc(where), builder_.getI32Type(), static_cast<std::int32_t>(value));
-}
-
-void StdGenerator::notYet(SourceLocation where, const char *what) {
-  // 아직 만들지 않은 노드를 조용히 0으로 바꾸면 틀린 프로그램이 돌아간다.
-  // 오류로 멈추게 해서, 단계마다 무엇이 남았는지 드러나게 한다.
-  diags_.error(where, std::string("the MLIR generator does not handle ") +
-                          what + " yet");
 }
 
 } // namespace
