@@ -1,5 +1,6 @@
 #include "cminus/MLIRGen.h"
 
+#include "cminus/CMinusDialect.h"
 #include "llvm/IR/Module.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -22,7 +23,7 @@ namespace cminus {
 void loadMLIRDialects(mlir::MLIRContext &context) {
   context.loadDialect<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
                       mlir::func::FuncDialect, mlir::LLVM::LLVMDialect,
-                      mlir::memref::MemRefDialect>();
+                      mlir::memref::MemRefDialect, dialect::CMinusDialect>();
   mlir::registerBuiltinDialectTranslation(context);
   mlir::registerLLVMDialectTranslation(context);
 }
@@ -32,8 +33,6 @@ std::unique_ptr<llvm::Module> lowerMLIRToLLVM(mlir::ModuleOp module,
                                               llvm::LLVMContext &llvmContext,
                                               bool printAfterAll,
                                               std::string &error) {
-  (void)flavor; // cminus -> cf will run first once the cminus dialect exists
-
   mlir::MLIRContext *context = module.getContext();
   mlir::PassManager pm(context);
   if (printAfterAll) {
@@ -48,6 +47,10 @@ std::unique_ptr<llvm::Module> lowerMLIRToLLVM(mlir::ModuleOp module,
         },
         /*printModuleScope=*/true, /*printAfterOnlyOnChange=*/false);
   }
+
+  // The cminus generator's output first becomes what the std generator emits.
+  if (flavor == MLIRFlavor::CMinus)
+    pm.addPass(createLowerCMinusToCFPass());
 
   // One pass per dialect rather than convert-to-llvm, so that
   // --mlir-print-ir-after-all shows each dialect going away in turn.

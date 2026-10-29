@@ -439,11 +439,6 @@ int main(int argc, char **argv) {
   std::unique_ptr<llvm::Module> module;
 #if defined(CMINUS_HAVE_MLIR)
   if (opts.useMLIR) {
-    if (opts.mlirCMinus) {
-      std::cerr << "cmc: error: --use-mlir=cminus is not implemented yet\n";
-      return 1;
-    }
-
     mlir::MLIRContext mlirContext;
     cminus::loadMLIRDialects(mlirContext);
     cminus::MLIRGenOptions mlirOptions;
@@ -451,7 +446,10 @@ int main(int argc, char **argv) {
     mlirOptions.indexChecks = opts.indexChecks;
 
     mlir::OwningOpRef<mlir::ModuleOp> mlirModule =
-        cminus::generateStdMLIR(*program, mlirContext, diags, mlirOptions);
+        opts.mlirCMinus ? cminus::generateCMinusMLIR(*program, mlirContext,
+                                                     diags, mlirOptions)
+                        : cminus::generateStdMLIR(*program, mlirContext, diags,
+                                                  mlirOptions);
     if (!mlirModule || diags.hasErrors())
       return finish(diags, opts.useColor);
 

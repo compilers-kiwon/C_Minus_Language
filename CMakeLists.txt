@@ -91,7 +91,25 @@ if(CMINUS_BUILD_COMPILER)
     find_package(MLIR REQUIRED CONFIG)
     message(STATUS "Using MLIR from ${MLIR_DIR}")
 
-    target_sources(cmc PRIVATE src/MLIRLower.cpp src/MLIRStdGen.cpp)
+    # The cminus dialect is written in TableGen (ODS); mlir-tblgen generates
+    # its C++ into the build directory whenever the .td file changes.
+    list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
+    include(AddLLVM) # TableGen.cmake calls its get_subproject_title
+    include(AddMLIR)
+    set(LLVM_TARGET_DEFINITIONS include/cminus/CMinusOps.td)
+    mlir_tablegen(CMinusDialect.h.inc -gen-dialect-decls -dialect=cminus
+                  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+    mlir_tablegen(CMinusDialect.cpp.inc -gen-dialect-defs -dialect=cminus
+                  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+    mlir_tablegen(CMinusOps.h.inc -gen-op-decls EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+    mlir_tablegen(CMinusOps.cpp.inc -gen-op-defs EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+    add_public_tablegen_target(CMinusOpsIncGen)
+    add_dependencies(cmc CMinusOpsIncGen)
+
+    target_sources(cmc PRIVATE
+      src/CMinusDialect.cpp src/CMinusToCF.cpp src/MLIRCMinusGen.cpp
+      src/MLIRLower.cpp src/MLIRStdGen.cpp)
+    target_include_directories(cmc PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_include_directories(cmc SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS})
     target_compile_definitions(cmc PRIVATE CMINUS_HAVE_MLIR)
     target_link_libraries(cmc PRIVATE
@@ -151,12 +169,16 @@ if(CMINUS_BUILD_COMPILER)
               CMINUS_RT=$<TARGET_FILE:cminus_rt>
               bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
     if(CMINUS_ENABLE_MLIR)
-      # The same programs through the MLIR path, so both paths must agree.
-      # Only the cases without arrays until the std generator handles them.
+      # The same programs through both MLIR paths, so all three must agree.
       add_test(NAME execution-mlir-std
         COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
                 CMINUS_RT=$<TARGET_FILE:cminus_rt>
                 CMC_FLAGS=--use-mlir=std
+                bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
+      add_test(NAME execution-mlir-cminus
+        COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
+                CMINUS_RT=$<TARGET_FILE:cminus_rt>
+                CMC_FLAGS=--use-mlir=cminus
                 bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_exec_tests.sh)
     endif()
   endif()
