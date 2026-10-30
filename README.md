@@ -78,6 +78,7 @@ Two options exist for checking rather than developing:
 | `-DCMINUS_SANITIZERS=ON` | Build with ASan and UBSan, not recovering from a report |
 | `-DCMINUS_BUILD_RUNTIME=OFF` | Compiler only; nothing is built for the target |
 | `-DCMINUS_BUILD_COMPILER=OFF` | Runtime only, and LLVM is not needed at all |
+| `-DCMINUS_ENABLE_MLIR=ON` | Add the [MLIR path](#the-mlir-path); needs MLIR as well |
 
 The last two exist because the compiler and the runtime end up on different
 machines as soon as anything is cross-compiled, and a build system that knows
@@ -328,6 +329,87 @@ leaves the upper bound unchecked, and marking an out-of-range access
 exploit. The negative half of the check *is* required by the spec, so each
 subscript is guarded unless `-fno-index-check` is given.
 
+## The MLIR path
+
+A second code generator, there for learning MLIR: it produces the same
+programs, but on the way to LLVM IR they pass through MLIR, where every
+lowering step can be printed. It is off by default and nothing else depends on
+it; without it `cmc` has no MLIR code and no MLIR options.
+
+```bash
+sudo apt install -y libmlir-21-dev mlir-21-tools   # from apt.llvm.org
+cmake -S . -B build-mlir -G Ninja -DCMINUS_ENABLE_MLIR=ON \
+      -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
+      -DMLIR_DIR=/usr/lib/llvm-21/lib/cmake/mlir
+cmake --build build-mlir
+```
+
+| Option | Effect |
+| :- | :- |
+| `--use-mlir`, `--use-mlir=std` | Generate the func, arith, cf and memref dialects directly |
+| `--use-mlir=cminus` | Generate the cminus dialect, which keeps `if` and `while` as ops with regions |
+| `--emit-mlir` | Print the MLIR the generator made and stop |
+| `--mlir-print-ir-after-all` | Print the whole module to stderr after every lowering pass |
+
+Everything after LLVM IR — the optimizer, the object file, the link — is the
+same as on the default path, so the other flags work unchanged.
+
+```
+          std:    AST ──────────────────────────────┐
+                                                    ▼
+                                       func, arith, cf, memref (+ llvm.unreachable)
+                                                    │  finalize-memref-to-llvm
+          cminus: AST ─▶ cminus ─▶ lower-cminus-to-cf  convert-arith-to-llvm
+                                                    │  convert-cf-to-llvm
+                                                    │  convert-func-to-llvm
+                                                    ▼  reconcile-unrealized-casts
+                                              LLVM dialect ─▶ LLVM IR ─▶ as before
+```
+
+One pass per dialect, rather than `convert-to-llvm`, so that
+`--mlir-print-ir-after-all` shows each dialect disappear in turn. Comparing
+the two generators, and either against the default path:
+
+```bash
+build-mlir/cmc --use-mlir=std    --emit-mlir examples/sort.cm   # blocks and cf branches
+build-mlir/cmc --use-mlir=cminus --emit-mlir examples/sort.cm   # nested cminus.while / cminus.if
+build-mlir/cmc --use-mlir=cminus --mlir-print-ir-after-all -c examples/sort.cm -o /tmp/s.o
+diff <(build-mlir/cmc --emit-llvm examples/gcd.cm) \
+     <(build-mlir/cmc --use-mlir --emit-llvm examples/gcd.cm)
+```
+
+How C- maps onto MLIR, where it differs from the LLVM table above:
+
+| C- | MLIR |
+| :- | :- |
+| `int x` (local or parameter slot) | `memref<i32>` from `memref.alloca`, read and written with `memref.load`/`store` |
+| `int x[10]` | `memref<10xi32>`, as a `memref.global` or an entry-block `memref.alloca` |
+| `int a[]` parameter | `memref<?xi32>`; an argument of known size goes through `memref.cast` |
+| global | `memref.global` initialized with `dense<0>`, reached by `memref.get_global` |
+| subscript | `arith.index_cast` to `index`, after the negative check |
+| negative check | std: `cf.cond_br` to a block that calls `__cminus_index_error` and ends in `llvm.unreachable`; cminus: one `cminus.index_check` |
+| `if`, `while` | std: blocks joined by `cf.br`/`cf.cond_br`; cminus: `cminus.if`/`cminus.while` with single-block regions |
+| `return` | std: `func.return`; cminus: `cminus.return`, legal at any depth |
+
+The cminus dialect is defined in TableGen, in
+[`include/cminus/CMinusOps.td`](include/cminus/CMinusOps.td); `mlir-tblgen`
+turns it into C++ in the build directory whenever the file changes.
+[`src/CMinusToCF.cpp`](src/CMinusToCF.cpp) flattens its regions into the
+function's CFG the way MLIR's own `scf → cf` lowering does.
+
+Differences from the default path:
+
+- **Host target only.** `--use-mlir` with `--target` is refused.
+- **Subscripts become `getelementptr inbounds nuw`.** `finalize-memref-to-llvm`
+  emits those flags, already at `-O0` (seen with MLIR 21.1.8), where the
+  default path deliberately emits a plain `getelementptr` (see above). So on
+  this path a subscript past the upper bound is undefined behaviour the
+  optimizer may exploit, and with `-fno-index-check` a negative one is too.
+  Programs that stay in bounds behave the same.
+- **Dead code after a branch that always returns** is dropped rather than kept
+  in an unreachable block, because the dialect conversions leave such blocks
+  unconverted and the lowering then fails. Only the IR differs.
+
 ## Yocto
 
 [`meta-cminus/`](meta-cminus/) is a layer with three recipes:
@@ -408,7 +490,11 @@ them still runs what it can. `CROSS_REQUIRED=1` turns every skip into a
 failure, which is what CI sets: a skip there would be indistinguishable from
 a pass.
 
-`ctest --test-dir build` runs all three.
+`ctest --test-dir build` runs all three. A build with
+`-DCMINUS_ENABLE_MLIR=ON` adds `execution-mlir-std` and
+`execution-mlir-cminus`: the end-to-end suite again, with
+`CMC_FLAGS=--use-mlir=std` or `--use-mlir=cminus`, against the same
+expectations. CI does not build the MLIR path.
 
 ## Continuous integration
 
@@ -450,3 +536,4 @@ tests/exec/       end-to-end compile-link-run tests
 | LLVM IR generation, optimization and object output | done |
 | Cross compilation to any LLVM back end | done |
 | Yocto layer (built end to end) | done |
+| MLIR path, std and cminus dialects (host only, optional) | done |
