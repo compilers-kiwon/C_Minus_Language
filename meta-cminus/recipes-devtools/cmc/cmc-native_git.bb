@@ -7,12 +7,10 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=0813489dfd365ec0eee0107c4d289c63"
 
 SRC_URI = "git://github.com/compilers-kiwon/C_Minus_Language.git;protocol=https;branch=main"
-# Pinned to the commit rather than the tag: a tag can be moved, a commit cannot.
-# Past v0.1.3, for two things that landed after the tag: cmc working with
-# LLVM 23, which openembedded-core master carries, and the MLIR path compiling
-# for other targets than the host. PV describes the pin and not the branch.
-SRCREV = "94ce6f5153cea98ba3d481fbf6a3992ecb957319"
-PV = "0.1.3+git"
+# Pinned to v0.2.0's commit rather than the tag: a tag can be moved, a commit
+# cannot. PV describes the pin and not the branch.
+SRCREV = "2f24b8dcd4edec8702a6dd942c996eba701695f2"
+PV = "0.2.0"
 
 DEPENDS = "llvm-native"
 

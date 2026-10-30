@@ -170,8 +170,8 @@ it, set it to a pushed commit that contains `CMINUS_BUILD_COMPILER`,
 `CMINUS_BUILD_RUNTIME` and `LICENSE`, and rerun `bitbake cminus-hello`.
 
 `PV` describes the pinned revision, not the branch tip, so it moves with
-`SRCREV` and not with a release. The pin currently sits past v0.1.3, on the
-LLVM 23 fix and the MLIR path's cross compilation, so `PV` is `0.1.3+git`.
+`SRCREV` and not with a release. The pin currently sits on v0.2.0's commit,
+so `PV` is `0.2.0`.
 Both recipes share the pin, so that the compiler and the runtime it links in
 come from one commit. After moving it, `scripts/check-examples.sh` is the
 check that matters.
