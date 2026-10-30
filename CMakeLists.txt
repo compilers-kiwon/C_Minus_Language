@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(cminus
-  VERSION 0.1.3
+  VERSION 0.2.0
   DESCRIPTION "A compiler for the C-Minus language (Louden, Appendix A)"
   LANGUAGES C CXX)
 

@@ -124,6 +124,16 @@ $ grep cminus-hello tmp/deploy/images/qemux86-64/*.manifest
 core-image-minimal-qemux86-64.rootfs.manifest:cminus-hello x86-64-v3 1.0-r0
 ```
 
+Rebuilt from an empty build directory against `b62d5e6` with LLVM 23.1.3 and
+`cmc` built with its MLIR path: 5466 tasks, all succeeded. The binary in the
+rootfs runs against the rootfs's own libc rather than the host's:
+
+```
+$ R=tmp/work/qemux86_64-oe-linux/core-image-minimal/1.0/rootfs
+$ echo "270 192" | qemu-x86_64 -L $R -E LD_LIBRARY_PATH=/usr/lib:/lib $R/usr/bin/cminus-hello
+6
+```
+
 The image was built for `qemux86-64` only. The `qemuarm64` one stops inside
 openembedded-core rather than here: `procps` 4.0.7 fails to link for aarch64
 against the GCC 16 that master currently carries.

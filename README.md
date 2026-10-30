@@ -16,11 +16,13 @@ LLVM back end.
 Three ways in, depending on what you want.
 
 **A released binary.** Nothing to build; needs a glibc no older than Ubuntu
-24.04's, since LLVM itself is linked in.
+24.04's, since LLVM itself is linked in. It leaves out the MLIR path
+(`--use-mlir`): that one has to link the shared `libLLVM` MLIR was built
+against, so it comes from a source build.
 
 ```bash
-curl -fsSLO https://github.com/compilers-kiwon/C_Minus_Language/releases/latest/download/cmc-v0.1.3-linux-x86_64.tar.gz
-tar -xzf cmc-v0.1.3-linux-x86_64.tar.gz && cd cmc-v0.1.3-linux-x86_64
+curl -fsSLO https://github.com/compilers-kiwon/C_Minus_Language/releases/latest/download/cmc-v0.2.0-linux-x86_64.tar.gz
+tar -xzf cmc-v0.2.0-linux-x86_64.tar.gz && cd cmc-v0.2.0-linux-x86_64
 bin/cmc -O2 examples/gcd.cm -o gcd && echo "270 192" | ./gcd
 ```
 
@@ -445,9 +447,9 @@ Needs LLVM 21, which rules out `walnascar` and older. The layer declares
 Built end to end against openembedded-core master with LLVM 22.1.8, for both
 `qemux86-64` and `qemuarm64`: the binaries run under emulation carrying the
 distribution's hardening flags, and `core-image-minimal` for `qemux86-64`
-lists `cminus-hello` in its rootfs manifest. Rebuilt for `qemux86-64` with
-LLVM 23.1.3, which needed a fix in `cmc` and a newer pin; the image has not
-been rebuilt with 23.
+lists `cminus-hello` in its rootfs manifest. Rebuilt with LLVM 23.1.3, which
+needed a fix in `cmc` and a newer pin, the image included: the `cminus-hello`
+in its rootfs prints 6 against the rootfs's own libc.
 
 With LLVM 23.1.3 and the `cmc` the layer builds, MLIR path included,
 [`meta-cminus/scripts/check-examples.sh`](meta-cminus/scripts/check-examples.sh)
