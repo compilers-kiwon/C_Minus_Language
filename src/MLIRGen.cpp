@@ -57,29 +57,29 @@ private:
   void emitFunction(const FunDecl &decl);  // 함수 하나: 시그니처 + 몸체
   void collectLocals(const Stmt &stmt, std::vector<const VarDecl *> &out);
   bool blockOpen();                        // 커서가 있는 블록에 아직 종결자가 없는가
-  void startBlock(mlir::Block *block);     // 블록을 함수 끝에 붙이고 커서를 그 안으로 (1-e)
+  void startBlock(mlir::Block *block);     // 블록을 함수 끝에 붙이고 커서를 그 안으로
 
-  // --- 문장 (1-c). 커서가 있는 블록 끝에 소스 순서대로 붙인다.
+  // --- 문장. 커서가 있는 블록 끝에 소스 순서대로 붙인다.
   void emitCompound(const CompoundStmt &block);  // { ... }
   void emitStmt(const Stmt &stmt);               // 문장 종류별로 나눠 보내기
-  void emitIf(const IfStmt &stmt);               // if (c) s [else s]   (1-e)
-  void emitWhile(const WhileStmt &stmt);         // while (c) s         (1-e)
+  void emitIf(const IfStmt &stmt);               // if (c) s [else s]
+  void emitWhile(const WhileStmt &stmt);         // while (c) s
   void emitReturn(const ReturnStmt &stmt);       // return; / return e;
   void emitRegion(mlir::Region &region, const Stmt *stmt);  // cminus region 하나 채우기
   void createReturn(mlir::Location where, mlir::Value value);  // func.return | cminus.return
 
-  // --- 식 (1-c). 피연산자를 먼저 만들고 그 값으로 연산 op를 만든다 (후위 순회).
+  // --- 식. 피연산자를 먼저 만들고 그 값으로 연산 op를 만든다 (후위 순회).
   mlir::Value emitExpr(const Expr &expr);          // 식 하나 → i32 값 하나
-  mlir::Value emitAssign(const AssignExpr &expr);  // x = e  (1-d)
+  mlir::Value emitAssign(const AssignExpr &expr);  // x = e
   mlir::Value emitBinary(const BinaryExpr &expr);  // + - * / 와 비교
   mlir::Value emitCall(const CallExpr &expr);      // f(a, b)
-  mlir::Value emitCondition(const Expr &expr);     // 참/거짓 판정 → i1  (1-e)
+  mlir::Value emitCondition(const Expr &expr);     // 참/거짓 판정 → i1
   /// 변수의 저장소(memref)를 돌려주고, a[i]이면 첨자를 indices에 넣는다.
   mlir::Value addressOf(const VarExpr &expr,
                         llvm::SmallVectorImpl<mlir::Value> &indices);
   mlir::Value storageOf(const Symbol &symbol, SourceLocation where);  // 첨자 없는 저장소
   mlir::MemRefType storageType(const Symbol &symbol);  // memref<i32>, <Nxi32>, <?xi32>
-  void checkIndex(mlir::Value index, SourceLocation where);  // 음수 첨자 검사 (Task 4)
+  void checkIndex(mlir::Value index, SourceLocation where);  // 음수 첨자 검사
   mlir::Value int32(SourceLocation where, long long value);  // i32 상수
 
   mlir::OpBuilder builder_;   // op를 만드는 "커서 달린 펜"
@@ -707,7 +707,8 @@ mlir::Value MLIRGenerator::emitCall(const CallExpr &expr) {
 mlir::Value MLIRGenerator::emitCondition(const Expr &expr) {
   // spec 3.5: 0이 아니면 참. cf.cond_br는 i1을 받으므로 `값 != 0`으로 바꾼다.
   // 조건이 비교식이면 cmpi → extui → cmpi ne 0이 되어 장황하지만,
-  // 최적화(canonicalize, LLVM instcombine)가 정리한다. IRGen.cpp도 같다.
+  // -O1 이상에서 LLVM의 instcombine이 정리한다. IRGen.cpp도 같다.
+  // (MLIR의 canonicalize도 정리하지만 cmc의 lowering은 그 pass를 돌리지 않는다.)
   mlir::Value value = emitExpr(expr);
   return builder_.create<mlir::arith::CmpIOp>(
       loc(expr.loc), mlir::arith::CmpIPredicate::ne, value, int32(expr.loc, 0));
