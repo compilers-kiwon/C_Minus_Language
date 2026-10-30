@@ -64,10 +64,12 @@ private:
   llvm::Constant *indexZero() const {
     return llvm::ConstantInt::get(indexTy(), 0);
   }
-  /// The current block still needs a terminator.
+  /// The current block still needs a terminator. Tested by hand rather than
+  /// with getTerminator(): LLVM 23 made that assert on an open block, and
+  /// the getTerminatorOrNull() it added does not exist in LLVM 21.
   bool blockOpen() const {
     llvm::BasicBlock *block = builder_.GetInsertBlock();
-    return block && !block->getTerminator();
+    return block && (block->empty() || !block->back().isTerminator());
   }
   /// How a symbol is stored: an int, a fixed-size array, or -- for an array
   /// parameter, which is passed by reference (spec 3.3) -- a pointer.

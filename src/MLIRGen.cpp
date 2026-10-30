@@ -283,7 +283,7 @@ void MLIRGenerator::collectLocals(const Stmt &stmt,
 
 bool MLIRGenerator::blockOpen() {
   // 블록의 마지막 op가 종결자(return, cf.br, ...)가 아니면 아직 열려 있다.
-  // IRGen.cpp의 blockOpen()에서 `!block->getTerminator()`에 해당한다.
+  // IRGen.cpp의 blockOpen()에서 `!block->back().isTerminator()`에 해당한다.
   mlir::Block *block = builder_.getInsertionBlock();
   return block && !block->mightHaveTerminator();
 }
