@@ -62,7 +62,12 @@ IMAGE_INSTALL:append = " cminus-hello"
 
 ## Status
 
-Built end to end against openembedded-core master (`blacksail`) with LLVM
+Rebuilt for `qemux86-64` against openembedded-core master `b62d5e6`
+(`blacksail`, 2026-10-29) with LLVM 23.1.3: 1414 tasks, all succeeded, and
+`cminus-hello` prints 6 under `qemu-x86_64`. That is the current pin. LLVM 23
+is what made this rebuild necessary; see the last row of the table below.
+
+Before that, built end to end against openembedded-core master with LLVM
 22.1.8, on two machines. 1035 tasks each, all succeeded:
 
 | `MACHINE` | Result |
@@ -95,7 +100,7 @@ The image was built for `qemux86-64` only. The `qemuarm64` one stops inside
 openembedded-core rather than here: `procps` 4.0.7 fails to link for aarch64
 against the GCC 16 that master currently carries.
 
-Four things only the real build could find, in the order they appeared:
+Five things only the real build could find, in the order they appeared:
 
 | Symptom | Cause |
 | :- | :- |
@@ -103,8 +108,10 @@ Four things only the real build could find, in the order they appeared:
 | `find_package(LLVM)` in a runtime-only build | `SRCREV` pinned a commit older than the CMake split |
 | QA: no `GNU_HASH` | `${LDFLAGS}` was not passed to the driver, only `${CC}` |
 | `DEPENDS = "cmc-native"` unresolved | `inherit native` alone leaves `PN` as `cmc`; the file needs the `-native` suffix |
+| `cmc` aborts in `cminus-hello:do_compile` | LLVM 23's `BasicBlock::getTerminator()` asserts on a block without one, which `cmc` used to test for |
 
-The last one showed up in variable expansion, the rest only when tasks ran.
+The fourth one showed up in variable expansion, the rest only when tasks ran.
+The CI job only parses the layer, so it cannot catch any of them.
 
 ## Bumping the revision
 
@@ -113,6 +120,6 @@ it, set it to a pushed commit that contains `CMINUS_BUILD_COMPILER`,
 `CMINUS_BUILD_RUNTIME` and `LICENSE`, and rerun `bitbake cminus-hello`.
 
 `PV` describes the pinned revision, not the branch tip, so it moves with
-`SRCREV` and not with a release. The pin currently sits between v0.1.2 and
-v0.1.3, which changed nothing either recipe builds; chasing the newer tag
-would advertise an upgrade over identical source and rebuild it to prove it.
+`SRCREV` and not with a release. The pin currently sits past v0.1.3, on the
+LLVM 23 fix, so `PV` is `0.1.3+git`. Both recipes share the pin, so that the
+compiler and the runtime it links in come from one commit.

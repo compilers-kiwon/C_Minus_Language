@@ -438,7 +438,9 @@ Needs LLVM 21, which rules out `walnascar` and older. The layer declares
 Built end to end against openembedded-core master with LLVM 22.1.8, for both
 `qemux86-64` and `qemuarm64`: the binaries run under emulation carrying the
 distribution's hardening flags, and `core-image-minimal` for `qemux86-64`
-lists `cminus-hello` in its rootfs manifest.
+lists `cminus-hello` in its rootfs manifest. Rebuilt for `qemux86-64` with
+LLVM 23.1.3, which needed a fix in `cmc` and a newer pin; `qemuarm64` and the
+image have not been rebuilt with 23.
 [meta-cminus/README.md](meta-cminus/README.md) has what the real build caught
 that reading the recipes could not.
 

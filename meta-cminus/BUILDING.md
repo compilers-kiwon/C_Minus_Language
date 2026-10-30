@@ -1,8 +1,10 @@
 # Building meta-cminus from scratch
 
-These are the steps that were actually run, on Ubuntu 26.04 with 28 cores.
-Expect a couple of hours and roughly 20 GB the first time: LLVM is built from
-source, and so is the cross toolchain.
+These are the steps that were actually run, on Ubuntu 26.04 with 28 cores,
+and again on Ubuntu 24.04 under WSL with 24 cores and 15 GB. Expect a couple
+of hours and roughly 20 GB the first time: LLVM is built from source, and so
+is the cross toolchain. (The WSL run took 33 minutes with 4 threads and
+`-j 6`.)
 
 ## 1. Host packages
 
@@ -109,10 +111,21 @@ W=tmp/work/x86-64-v3-oe-linux/cminus-hello/1.0
 
 file $W/build/cminus-hello
 readelf -d $W/build/cminus-hello | grep -E 'GNU_HASH|BIND_NOW'
-echo "270 192" | qemu-x86_64 -L $W/recipe-sysroot $W/build/cminus-hello
+echo "270 192" | qemu-x86_64 -L $W/recipe-sysroot \
+    -E LD_LIBRARY_PATH=/usr/lib:/lib $W/build/cminus-hello
 ```
 
-The last line prints `6`. The packages land in
+The last line prints `6`. `qemu-x86_64` comes from the host's `qemu-user`
+package. `-L` alone is not enough on every host: the sysroot has no
+`etc/ld.so.cache`, so the target's loader reads the host's and can pick up
+the host's `libc.so.6`. On Ubuntu 24.04 that mix fails with
+
+```
+libc.so.6: undefined symbol: __nptl_change_stack_perm, version GLIBC_PRIVATE
+```
+
+and `LD_LIBRARY_PATH`, searched before the cache, keeps the lookup inside the
+sysroot. The packages land in
 `tmp/deploy/ipk/x86-64-v3/cminus-hello*.ipk`.
 
 To put the program in an image instead, add to `local.conf`:

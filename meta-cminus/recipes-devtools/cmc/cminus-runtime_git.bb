@@ -7,12 +7,12 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=0813489dfd365ec0eee0107c4d289c63"
 
 SRC_URI = "git://github.com/compilers-kiwon/C_Minus_Language.git;protocol=https;branch=main"
-# Past v0.1.2: the split into CMINUS_BUILD_COMPILER and
-# CMINUS_BUILD_RUNTIME, which these two recipes depend on, and the
-# licence file, both landed after that tag. Behind v0.1.3, which changed
-# nothing this recipe builds, so PV describes the pin and not the branch.
-SRCREV = "bbca60e208fa27b3213a2e75d1b72aad5d500d5d"
-PV = "0.1.2+git"
+# The same revision as cmc-native, so that the compiler and the runtime it
+# links in always come from one commit. Nothing this recipe builds changed
+# after v0.1.2's split into CMINUS_BUILD_COMPILER and CMINUS_BUILD_RUNTIME;
+# PV describes the pin and not the branch.
+SRCREV = "b1a1f1e3c5d5ebef8b4d43a3e6ec9354d53a75e5"
+PV = "0.1.3+git"
 
 inherit cmake
 
