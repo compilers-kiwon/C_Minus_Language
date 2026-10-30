@@ -97,7 +97,7 @@ private:
 
 mlir::OwningOpRef<mlir::ModuleOp> MLIRGenerator::run(const Program &program) {
   // 빈 모듈을 만들고 커서를 모듈 블록의 끝에 둔다.
-  // 이후 create<>로 만드는 함수와 전역은 모두 여기, 모듈 안에 차례로 쌓인다.
+  // 이후 Op::create로 만드는 함수와 전역은 모두 여기, 모듈 안에 차례로 쌓인다.
   module_ = mlir::ModuleOp::create(loc(SourceLocation{}));
   builder_.setInsertionPointToEnd(module_.getBody());
 
@@ -133,18 +133,18 @@ void MLIRGenerator::declareBuiltins() {
   // 블록(몸체)을 만들지 않은 func.func = 외부 함수 선언.
   // 정의는 런타임(cminus_rt.c)에 있고, LLVM IR에서는 `declare`가 된다.
   // 몸체 없는 함수는 private이어야 verifier가 받아 준다.
-  auto input = builder_.create<mlir::func::FuncOp>(
+  auto input = mlir::func::FuncOp::create(builder_,
       where, "input", builder_.getFunctionType(/*inputs=*/{}, /*results=*/{i32}));
   input.setPrivate();                                    // () -> i32
 
-  auto output = builder_.create<mlir::func::FuncOp>(
+  auto output = mlir::func::FuncOp::create(builder_,
       where, "output", builder_.getFunctionType(/*inputs=*/{i32}, /*results=*/{}));
   output.setPrivate();                                   // (i32) -> ()
 
   // 음수 첨자를 만나면 부르는 런타임 함수 (spec 3.6). 돌아오지 않는다.
   // -fno-index-check이면 부를 일이 없으므로 선언도 하지 않는다.
   if (options_.indexChecks) {
-    auto indexError = builder_.create<mlir::func::FuncOp>(
+    auto indexError = mlir::func::FuncOp::create(builder_,
         where, "__cminus_index_error",
         builder_.getFunctionType(/*inputs=*/{i32}, /*results=*/{}));
     indexError.setPrivate();                             // (i32) -> ()
@@ -167,7 +167,7 @@ void MLIRGenerator::emitGlobal(const VarDecl &decl) {
   auto zero = mlir::DenseElementsAttr::get(
       mlir::RankedTensorType::get(type.getShape(), i32),
       llvm::ArrayRef<mlir::Attribute>{builder_.getI32IntegerAttr(0)});
-  builder_.create<mlir::memref::GlobalOp>(
+  mlir::memref::GlobalOp::create(builder_,
       loc(decl.loc), decl.name, /*sym_visibility=*/mlir::StringAttr(), type,
       zero, /*constant=*/false, /*alignment=*/mlir::IntegerAttr());
 }
@@ -194,7 +194,7 @@ void MLIRGenerator::emitFunction(const FunDecl &decl) {
 
   // (2) func.func 생성. 커서가 모듈 끝에 있으므로 모듈 안에 생긴다.
   //     몸체보다 먼저 만들어 두므로, 몸체 안의 재귀 호출도 이 함수를 찾는다.
-  auto fn = builder_.create<mlir::func::FuncOp>(
+  auto fn = mlir::func::FuncOp::create(builder_,
       where, decl.name, builder_.getFunctionType(inputs, results));
   function_ = fn;
 
@@ -222,9 +222,9 @@ void MLIRGenerator::emitFunction(const FunDecl &decl) {
       slots_[param.symbol] = entry->getArgument(i);    // memref<?xi32>
       continue;
     }
-    mlir::Value slot = builder_.create<mlir::memref::AllocaOp>(
+    mlir::Value slot = mlir::memref::AllocaOp::create(builder_,
         loc(param.loc), storageType(*param.symbol));    // memref<i32>
-    builder_.create<mlir::memref::StoreOp>(loc(param.loc), entry->getArgument(i), slot);
+    mlir::memref::StoreOp::create(builder_, loc(param.loc), entry->getArgument(i), slot);
     slots_[param.symbol] = slot;
   }
   //  (5b) 지역 변수: 중첩 블록까지 모두 모아 슬롯을 만든다. 초기값은 없다.
@@ -234,7 +234,7 @@ void MLIRGenerator::emitFunction(const FunDecl &decl) {
   for (const VarDecl *local : locals) {
     if (!local->symbol)
       continue;
-    slots_[local->symbol] = builder_.create<mlir::memref::AllocaOp>(
+    slots_[local->symbol] = mlir::memref::AllocaOp::create(builder_,
         loc(local->loc), storageType(*local->symbol));
   }
 
@@ -351,7 +351,7 @@ void MLIRGenerator::emitIf(const IfStmt &stmt) {
     // 기본 return은 IRGen.cpp의 if.end처럼 그대로 만들어지고, 펼친 뒤
     // 아무도 오지 않는 그 블록은 lower-cminus-to-cf가 처리한다.
     mlir::Value cond = emitCondition(*stmt.cond);
-    auto ifOp = builder_.create<dialect::IfOp>(where, cond);  // region 둘 다 빈 채로
+    auto ifOp = dialect::IfOp::create(builder_, where, cond);  // region 둘 다 빈 채로
     emitRegion(ifOp.getThenRegion(), stmt.thenStmt.get());
     if (stmt.elseStmt)
       emitRegion(ifOp.getElseRegion(), stmt.elseStmt.get());  // 없으면 빈 region
@@ -366,7 +366,7 @@ void MLIRGenerator::emitIf(const IfStmt &stmt) {
   auto *thenBlock = new mlir::Block();
   auto *elseBlock = stmt.elseStmt ? new mlir::Block() : nullptr;
   auto *endBlock = new mlir::Block();
-  builder_.create<mlir::cf::CondBranchOp>(where, cond, thenBlock,
+  mlir::cf::CondBranchOp::create(builder_, where, cond, thenBlock,
                                           elseBlock ? elseBlock : endBlock);
   // cond_br가 지금 블록의 종결자다. 이제 이 블록은 닫혔다.
 
@@ -376,13 +376,13 @@ void MLIRGenerator::emitIf(const IfStmt &stmt) {
   // then 안에서 return했으면 블록이 이미 닫혀 있다. 열려 있을 때만 end로 간다.
   // (then 안에 if/while이 있었다면 커서는 그 안쪽의 ^end에 있고, 거기서 이어간다.)
   if (blockOpen())
-    builder_.create<mlir::cf::BranchOp>(where, endBlock);
+    mlir::cf::BranchOp::create(builder_, where, endBlock);
 
   if (elseBlock) {
     startBlock(elseBlock);
     emitStmt(*stmt.elseStmt);
     if (blockOpen())
-      builder_.create<mlir::cf::BranchOp>(where, endBlock);
+      mlir::cf::BranchOp::create(builder_, where, endBlock);
   }
 
   // 두 갈래가 모두 return하면 ^end로 오는 분기가 없다. IRGen.cpp는 그래도
@@ -407,12 +407,12 @@ void MLIRGenerator::emitWhile(const WhileStmt &stmt) {
     //   } do {
     //     몸체 문장; cminus.yield
     //   }
-    auto whileOp = builder_.create<dialect::WhileOp>(where);
+    auto whileOp = dialect::WhileOp::create(builder_, where);
     {
       mlir::OpBuilder::InsertionGuard guard(builder_);
       builder_.setInsertionPointToEnd(&whileOp.getCondRegion().emplaceBlock());
       mlir::Value cond = emitCondition(*stmt.cond);
-      builder_.create<dialect::ConditionOp>(where, cond);
+      dialect::ConditionOp::create(builder_, where, cond);
     }
     emitRegion(whileOp.getBodyRegion(), stmt.body.get());
     return;
@@ -426,17 +426,17 @@ void MLIRGenerator::emitWhile(const WhileStmt &stmt) {
   auto *condBlock = new mlir::Block();
   auto *bodyBlock = new mlir::Block();
   auto *endBlock = new mlir::Block();
-  builder_.create<mlir::cf::BranchOp>(where, condBlock);
+  mlir::cf::BranchOp::create(builder_, where, condBlock);
 
   startBlock(condBlock);
   mlir::Value cond = emitCondition(*stmt.cond);
-  builder_.create<mlir::cf::CondBranchOp>(where, cond, bodyBlock, endBlock);
+  mlir::cf::CondBranchOp::create(builder_, where, cond, bodyBlock, endBlock);
 
   startBlock(bodyBlock);
   if (stmt.body)
     emitStmt(*stmt.body);
   if (blockOpen())
-    builder_.create<mlir::cf::BranchOp>(where, condBlock);
+    mlir::cf::BranchOp::create(builder_, where, condBlock);
 
   startBlock(endBlock);
 }
@@ -464,11 +464,11 @@ void MLIRGenerator::createReturn(mlir::Location where, mlir::Value value) {
   // cminus region 안에서도 return할 수 있어야 하므로 cminus flavor는 어디서나
   // cminus.return을 쓴다. 값이 없으면(void 함수) 피연산자 없이 만든다.
   if (structured_)
-    builder_.create<dialect::ReturnOp>(where, value);
+    dialect::ReturnOp::create(builder_, where, value);
   else if (value)
-    builder_.create<mlir::func::ReturnOp>(where, mlir::ValueRange{value});
+    mlir::func::ReturnOp::create(builder_, where, mlir::ValueRange{value});
   else
-    builder_.create<mlir::func::ReturnOp>(where);
+    mlir::func::ReturnOp::create(builder_, where);
 }
 
 void MLIRGenerator::emitRegion(mlir::Region &region, const Stmt *stmt) {
@@ -481,7 +481,7 @@ void MLIRGenerator::emitRegion(mlir::Region &region, const Stmt *stmt) {
   if (stmt)
     emitStmt(*stmt);
   if (blockOpen())
-    builder_.create<dialect::YieldOp>(builder_.getUnknownLoc());
+    dialect::YieldOp::create(builder_, builder_.getUnknownLoc());
 }
 
 // -------------------------------------------------------------------- 식
@@ -496,7 +496,7 @@ mlir::Value MLIRGenerator::emitExpr(const Expr &expr) {
     mlir::Value address = addressOf(static_cast<const VarExpr &>(expr), indices);
     if (!address)
       return int32(expr.loc, 0);
-    return builder_.create<mlir::memref::LoadOp>(loc(expr.loc), address, indices);
+    return mlir::memref::LoadOp::create(builder_, loc(expr.loc), address, indices);
   }
   case NodeKind::AssignExpr:
     return emitAssign(static_cast<const AssignExpr &>(expr));
@@ -518,7 +518,7 @@ mlir::Value MLIRGenerator::emitAssign(const AssignExpr &expr) {
       expr.target ? addressOf(*expr.target, indices) : mlir::Value();
   mlir::Value value = expr.value ? emitExpr(*expr.value) : int32(expr.loc, 0);
   if (address)
-    builder_.create<mlir::memref::StoreOp>(loc(expr.opLoc), value, address,
+    mlir::memref::StoreOp::create(builder_, loc(expr.opLoc), value, address,
                                            indices);                  // memref.store
   return value;
 }
@@ -543,7 +543,7 @@ mlir::Value MLIRGenerator::addressOf(const VarExpr &expr,
   //   %idx = arith.index_cast %i : i32 to index
   mlir::Value index = emitExpr(*expr.index);
   checkIndex(index, expr.index->loc);
-  indices.push_back(builder_.create<mlir::arith::IndexCastOp>(
+  indices.push_back(mlir::arith::IndexCastOp::create(builder_,
       loc(expr.index->loc), builder_.getIndexType(), index));
   return storage;
 }
@@ -558,7 +558,7 @@ mlir::Value MLIRGenerator::storageOf(const Symbol &symbol, SourceLocation where)
   // 함수 밖의 값을 직접 쓸 수 없다. 이름(@x)으로 그 주소를 꺼내 온다.
   //   %0 = memref.get_global @x : memref<i32>
   //   %1 = memref.get_global @g : memref<5xi32>
-  return builder_.create<mlir::memref::GetGlobalOp>(
+  return mlir::memref::GetGlobalOp::create(builder_,
       loc(where), storageType(symbol), symbol.name);
 }
 
@@ -596,15 +596,15 @@ void MLIRGenerator::checkIndex(mlir::Value index, SourceLocation where) {
   if (structured_) {
     // cminus.index_check %i — 위의 마름모 전체를 lower-cminus-to-cf가 만든다.
     // 블록을 나누지 않으므로 region 안에서도 커서가 그대로 이어진다.
-    builder_.create<dialect::IndexCheckOp>(here, index);
+    dialect::IndexCheckOp::create(builder_, here, index);
     return;
   }
 
-  mlir::Value negative = builder_.create<mlir::arith::CmpIOp>(
+  mlir::Value negative = mlir::arith::CmpIOp::create(builder_,
       here, mlir::arith::CmpIPredicate::slt, index, int32(where, 0));
   auto *failBlock = new mlir::Block();
   auto *okBlock = new mlir::Block();
-  builder_.create<mlir::cf::CondBranchOp>(here, negative, failBlock, okBlock);
+  mlir::cf::CondBranchOp::create(builder_, here, negative, failBlock, okBlock);
 
   // 실패 블록. 런타임 함수가 메시지를 찍고 exit(1)하므로 돌아오지 않는다.
   // std dialect에는 "여기는 도달하지 않음" 종결자가 없어서 LLVM dialect의
@@ -612,8 +612,8 @@ void MLIRGenerator::checkIndex(mlir::Value index, SourceLocation where) {
   startBlock(failBlock);
   auto indexError =
       module_.lookupSymbol<mlir::func::FuncOp>("__cminus_index_error");
-  builder_.create<mlir::func::CallOp>(here, indexError, mlir::ValueRange{index});
-  builder_.create<mlir::LLVM::UnreachableOp>(here);
+  mlir::func::CallOp::create(builder_, here, indexError, mlir::ValueRange{index});
+  mlir::LLVM::UnreachableOp::create(builder_, here);
 
   // 통과 블록에서 원래 식을 이어서 만든다.
   startBlock(okBlock);
@@ -629,14 +629,14 @@ mlir::Value MLIRGenerator::emitBinary(const BinaryExpr &expr) {
   // 산술: 결과가 바로 i32.
   switch (expr.op) {
   case BinaryOp::Add:
-    return builder_.create<mlir::arith::AddIOp>(where, lhs, rhs);   // arith.addi
+    return mlir::arith::AddIOp::create(builder_, where, lhs, rhs);   // arith.addi
   case BinaryOp::Sub:
-    return builder_.create<mlir::arith::SubIOp>(where, lhs, rhs);   // arith.subi
+    return mlir::arith::SubIOp::create(builder_, where, lhs, rhs);   // arith.subi
   case BinaryOp::Mul:
-    return builder_.create<mlir::arith::MulIOp>(where, lhs, rhs);   // arith.muli
+    return mlir::arith::MulIOp::create(builder_, where, lhs, rhs);   // arith.muli
   case BinaryOp::Div:
     // spec 3.8: 0 쪽으로 자르는 부호 있는 나눗셈 = divsi (LLVM의 sdiv).
-    return builder_.create<mlir::arith::DivSIOp>(where, lhs, rhs);  // arith.divsi
+    return mlir::arith::DivSIOp::create(builder_, where, lhs, rhs);  // arith.divsi
   default:
     break;
   }
@@ -653,10 +653,10 @@ mlir::Value MLIRGenerator::emitBinary(const BinaryExpr &expr) {
   default:                     predicate = mlir::arith::CmpIPredicate::ne;  break;
   }
   mlir::Value compared =
-      builder_.create<mlir::arith::CmpIOp>(where, predicate, lhs, rhs);  // i1
+      mlir::arith::CmpIOp::create(builder_, where, predicate, lhs, rhs);  // i1
   // spec 3.7: C-에는 bool이 없고 비교의 값은 int 1 또는 0.
   // i1을 0으로 채워 넓힌다 (extui = zero-extend, LLVM의 zext).
-  return builder_.create<mlir::arith::ExtUIOp>(where, builder_.getI32Type(),
+  return mlir::arith::ExtUIOp::create(builder_, where, builder_.getI32Type(),
                                                compared);                 // i32
 }
 
@@ -691,14 +691,14 @@ mlir::Value MLIRGenerator::emitCall(const CallExpr &expr) {
       mlir::Value array =
           storageOf(*static_cast<const VarExpr &>(arg).symbol, arg.loc);
       if (array.getType() != paramType)
-        array = builder_.create<mlir::memref::CastOp>(loc(arg.loc), paramType, array);
+        array = mlir::memref::CastOp::create(builder_, loc(arg.loc), paramType, array);
       args.push_back(array);
       continue;
     }
     args.push_back(emitExpr(arg));
   }
 
-  auto call = builder_.create<mlir::func::CallOp>(where, callee, args);  // func.call @f(...)
+  auto call = mlir::func::CallOp::create(builder_, where, callee, args);  // func.call @f(...)
   // void 함수 호출은 결과가 없다. 의미 분석이 void 값을 쓰는 식을 막으므로
   // 빈 Value는 ExprStmt나 void 함수의 return처럼 값을 버리는 곳으로만 간다.
   return call.getNumResults() ? call.getResult(0) : mlir::Value();
@@ -710,14 +710,18 @@ mlir::Value MLIRGenerator::emitCondition(const Expr &expr) {
   // -O1 이상에서 LLVM의 instcombine이 정리한다. IRGen.cpp도 같다.
   // (MLIR의 canonicalize도 정리하지만 cmc의 lowering은 그 pass를 돌리지 않는다.)
   mlir::Value value = emitExpr(expr);
-  return builder_.create<mlir::arith::CmpIOp>(
+  return mlir::arith::CmpIOp::create(builder_,
       loc(expr.loc), mlir::arith::CmpIPredicate::ne, value, int32(expr.loc, 0));
 }
 
 mlir::Value MLIRGenerator::int32(SourceLocation where, long long value) {
   // IRGen.cpp의 int32()처럼 i32로 자른다.
-  return builder_.create<mlir::arith::ConstantIntOp>(
-      loc(where), builder_.getI32Type(), static_cast<std::int32_t>(value));
+  // ConstantIntOp이 아니라 ConstantOp: MLIR 21의 ConstantIntOp은 손으로 쓴
+  // 클래스라 Op::create가 없고, MLIR 23은 builder.create<Op>를 deprecated로
+  // 바꿨다. 두 버전 모두 되는 쪽이고 결과는 같은 arith.constant다.
+  return mlir::arith::ConstantOp::create(
+      builder_, loc(where),
+      builder_.getI32IntegerAttr(static_cast<std::int32_t>(value)));
 }
 
 } // namespace

@@ -71,15 +71,16 @@ struct IndexCheckLowering : mlir::OpRewritePattern<IndexCheckOp> {
 
     // createBlock(ok)는 ok 앞에 빈 블록을 만들고 커서를 그 안으로 옮긴다.
     mlir::Block *fail = rewriter.createBlock(ok);
-    rewriter.create<mlir::func::CallOp>(loc, indexError, mlir::ValueRange{index});
-    rewriter.create<mlir::LLVM::UnreachableOp>(loc);
+    mlir::func::CallOp::create(rewriter, loc, indexError, mlir::ValueRange{index});
+    mlir::LLVM::UnreachableOp::create(rewriter, loc);
 
     rewriter.setInsertionPointToEnd(current);
-    mlir::Value zero = rewriter.create<mlir::arith::ConstantIntOp>(
-        loc, rewriter.getI32Type(), 0);
-    mlir::Value negative = rewriter.create<mlir::arith::CmpIOp>(
-        loc, mlir::arith::CmpIPredicate::slt, index, zero);
-    rewriter.create<mlir::cf::CondBranchOp>(loc, negative, fail, ok);
+    // ConstantOp, not ConstantIntOp: see MLIRGenerator::int32 in MLIRGen.cpp.
+    mlir::Value zero = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getI32IntegerAttr(0));
+    mlir::Value negative = mlir::arith::CmpIOp::create(
+        rewriter, loc, mlir::arith::CmpIPredicate::slt, index, zero);
+    mlir::cf::CondBranchOp::create(rewriter, loc, negative, fail, ok);
 
     rewriter.eraseOp(op);   // splitBlock으로 ok의 맨 앞에 와 있던 op
     return mlir::success();
@@ -116,7 +117,7 @@ struct IfLowering : mlir::OpRewritePattern<IfOp> {
     }
 
     rewriter.setInsertionPointToEnd(current);
-    rewriter.create<mlir::cf::CondBranchOp>(loc, op.getCond(), thenBlock, elseBlock);
+    mlir::cf::CondBranchOp::create(rewriter, loc, op.getCond(), thenBlock, elseBlock);
     rewriter.eraseOp(op);
     // 두 갈래가 모두 return하면 ^cont로 오는 분기가 없다. 그 블록은
     // runOnOperation이 변환을 마친 뒤 한꺼번에 지운다.
@@ -155,7 +156,7 @@ struct WhileLowering : mlir::OpRewritePattern<WhileOp> {
     rewriter.inlineRegionBefore(op.getBodyRegion(), cont);
 
     rewriter.setInsertionPointToEnd(current);
-    rewriter.create<mlir::cf::BranchOp>(loc, condBlock);
+    mlir::cf::BranchOp::create(rewriter, loc, condBlock);
     rewriter.eraseOp(op);
     return mlir::success();
   }
