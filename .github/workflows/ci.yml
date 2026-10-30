@@ -19,13 +19,24 @@ env:
 
 jobs:
   build-and-test:
-    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.llvm != '21' && format(' / LLVM {0}', matrix.llvm) || '' }}
     runs-on: ubuntu-24.04
+    env:
+      LLVM_VERSION: ${{ matrix.llvm }}
     strategy:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
         build_type: [Debug, Release]
+        llvm: ["21"]
+        include:
+          # The newest LLVM as well, in Debug so that the assertions in its
+          # headers are live in cmc: LLVM 23 made BasicBlock::getTerminator()
+          # assert where 21 returned null, and only a real Yocto build -- which
+          # the job below does not do -- noticed.
+          - compiler: gcc
+            build_type: Debug
+            llvm: "23"
     steps:
       - uses: actions/checkout@v5
 
