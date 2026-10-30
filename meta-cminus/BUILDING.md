@@ -101,6 +101,15 @@ Out of memory: Killed process 2189 (systemd)
 Reckon on a gigabyte or two per compiler. 8 and `-j 8` is comfortable on a
 32 GB machine.
 
+`mlir-native` needs more than that: some of MLIR's generated dialect sources
+take several gigabytes each to compile. On a 15 GB machine `-j 6` got
+`cc1plus` killed partway through and `-j 3` built it, in 30 minutes. Limit
+that one recipe rather than the whole build:
+
+```
+PARALLEL_MAKE:pn-mlir-native = "-j 3"
+```
+
 ## 6. Add the layer and build
 
 ```bash
@@ -109,7 +118,8 @@ bitbake cminus-hello
 ```
 
 `bitbake cmc-native` alone builds just the compiler, which is most of the time
-anyway.
+anyway: it pulls in `mlir-native` for the MLIR path. To build `cmc` without
+it, add `PACKAGECONFIG:remove:pn-cmc-native = "mlir"` to `local.conf`.
 
 ## 7. Check what came out
 
@@ -135,6 +145,28 @@ libc.so.6: undefined symbol: __nptl_change_stack_perm, version GLIBC_PRIVATE
 and `LD_LIBRARY_PATH`, searched before the cache, keeps the lookup inside the
 sysroot. The packages land in
 `tmp/deploy/ipk/x86-64-v3/cminus-hello*.ipk`.
+
+## 8. Check every example, on every architecture
+
+`cminus-hello` is one program through one code generator. To build all of
+`tests/exec` with the `cmc` the layer made, for several machines and through
+the LLVM path and both MLIR generators, and run each under qemu against its
+expected output:
+
+```bash
+cd ~/yocto/oe/build
+/path/to/C_Minus_Language/meta-cminus/scripts/check-examples.sh \
+    qemux86 qemux86-64 qemuarm64 qemuriscv64
+```
+
+It builds `cminus-hello` for each machine first, which stages `cmc-native`,
+the cross toolchain and the target sysroot, then hands them to the
+repository's `tests/run_cross_tests.sh`. Every line should end in
+`10 passed, 0 failed`, and the script exits non-zero otherwise. Each new
+machine costs a cross toolchain and a glibc, about ten minutes with the sstate
+mirror.
+
+## An image
 
 To put the program in an image instead, add to `local.conf`:
 

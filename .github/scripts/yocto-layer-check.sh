@@ -60,7 +60,7 @@ has() {
     fi
 }
 
-for r in cmc-native cminus-runtime cminus-hello; do
+for r in cmc-native mlir-native cminus-runtime cminus-hello; do
     bitbake -e "$r" > "$WORK/$r.env"
     has "^PN=\"$r\"" "$WORK/$r.env" "PN is $r"
 done
@@ -69,6 +69,12 @@ done
 has 'DEPENDS=.*llvm-native'        "$WORK/cmc-native.env"     "cmc-native depends on llvm-native"
 has 'CLASSOVERRIDE="class-native"' "$WORK/cmc-native.env"     "cmc-native is native"
 has 'CMINUS_BUILD_COMPILER=OFF'    "$WORK/cminus-runtime.env" "the runtime skips the compiler"
+
+# The MLIR path is on by default, and MLIR is built against llvm-native.
+has 'DEPENDS=.*mlir-native'        "$WORK/cmc-native.env"     "cmc-native depends on mlir-native"
+has 'CMINUS_ENABLE_MLIR=ON'        "$WORK/cmc-native.env"     "cmc-native builds the MLIR path"
+has 'DEPENDS=.*llvm-native'        "$WORK/mlir-native.env"    "mlir-native depends on llvm-native"
+has 'OECMAKE_SOURCEPATH=.*/mlir"'  "$WORK/mlir-native.env"    "mlir-native builds the mlir directory"
 
 # The example must hand the driver a whole command and the distro's link
 # flags; without the latter package QA rejects the binary.

@@ -11,7 +11,7 @@ SRC_URI = "git://github.com/compilers-kiwon/C_Minus_Language.git;protocol=https;
 # links in always come from one commit. Nothing this recipe builds changed
 # after v0.1.2's split into CMINUS_BUILD_COMPILER and CMINUS_BUILD_RUNTIME;
 # PV describes the pin and not the branch.
-SRCREV = "b1a1f1e3c5d5ebef8b4d43a3e6ec9354d53a75e5"
+SRCREV = "94ce6f5153cea98ba3d481fbf6a3992ecb957319"
 PV = "0.1.3+git"
 
 inherit cmake

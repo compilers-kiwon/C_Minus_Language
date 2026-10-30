@@ -5,11 +5,12 @@ the target, and an example program compiled into an image.
 
 | Recipe | Runs on | Purpose |
 | :- | :- | :- |
-| `cmc-native` | build host | the compiler; `DEPENDS = "llvm-native"` |
+| `cmc-native` | build host | the compiler; `DEPENDS = "llvm-native"`, plus `mlir-native` for `--use-mlir` |
+| `mlir-native` | build host | MLIR, which openembedded-core's `llvm` recipe does not build |
 | `cminus-runtime` | target | `libcminus_rt.a`, linked into compiled programs |
 | `cminus-hello` | target | a `.cm` source turned into a binary in the image |
 
-## Why three recipes
+## Why these recipes
 
 Everything in Yocto is cross-compiled, which splits this project in two. `cmc`
 runs where the build runs, so it is native and needs LLVM. `libcminus_rt.a` is
@@ -30,6 +31,17 @@ cmc --target x86_64-oe-linux \
 `${CC}` is a command with eight arguments, not a program name. That is why
 `cmc --cc` accepts a whole command line: a cross driver without its sysroot is
 useless, and no build system hands one over any other way.
+
+`cmc-native` builds the MLIR path (`--use-mlir`) by default, through
+`PACKAGECONFIG[mlir]`. openembedded-core builds LLVM without MLIR and no layer
+in the OpenEmbedded index has an MLIR recipe, so `mlir-native` builds the
+`mlir` directory of the same `llvm-project` checkout standalone against
+`llvm-native`, the way openembedded-core's `lld` recipe does. It is the
+longest task in the layer (30 minutes at `-j 3`); to leave it out:
+
+```
+PACKAGECONFIG:remove:pn-cmc-native = "mlir"
+```
 
 ## Requirements
 
@@ -62,10 +74,26 @@ IMAGE_INSTALL:append = " cminus-hello"
 
 ## Status
 
+With the current pin, against openembedded-core master `b62d5e6` and LLVM
+23.1.3, [scripts/check-examples.sh](scripts/check-examples.sh) builds every
+program in `tests/exec` with the `cmc` this layer builds and runs it under
+user-mode qemu, through the LLVM path and both MLIR generators, at `-O0` and
+`-O2`:
+
+| `MACHINE` | Target | LLVM path | `--use-mlir=std` | `--use-mlir=cminus` |
+| :- | :- | :- | :- | :- |
+| `qemux86` | `i686-oe-linux` | 10/10 | 10/10 | 10/10 |
+| `qemux86-64` | `x86_64-oe-linux` | 10/10 | 10/10 | 10/10 |
+| `qemuarm64` | `aarch64-oe-linux` | 10/10 | 10/10 | 10/10 |
+| `qemuriscv64` | `riscv64-oe-linux` | 10/10 | 10/10 | 10/10 |
+
+The script fails if any program's output or exit status differs from its
+`.expected` file; it was checked to report a deliberately wrong one.
+
 Rebuilt for `qemux86-64` against openembedded-core master `b62d5e6`
 (`blacksail`, 2026-10-29) with LLVM 23.1.3: 1414 tasks, all succeeded, and
-`cminus-hello` prints 6 under `qemu-x86_64`. That is the current pin. LLVM 23
-is what made this rebuild necessary; see the last row of the table below.
+`cminus-hello` prints 6 under `qemu-x86_64`. LLVM 23 is what made this
+rebuild necessary; see the fifth row of the table below.
 
 Before that, built end to end against openembedded-core master with LLVM
 22.1.8, on two machines. 1035 tasks each, all succeeded:
@@ -113,6 +141,18 @@ Five things only the real build could find, in the order they appeared:
 The fourth one showed up in variable expansion, the rest only when tasks ran.
 The CI job only parses the layer, so it cannot catch any of them.
 
+`mlir-native` took five more, each a property of building MLIR standalone
+against an installed LLVM 23 rather than in-tree; the recipe comments say
+which line answers which:
+
+| Symptom | Cause |
+| :- | :- |
+| QA: `LIC_FILES_CHKSUM` mismatch | `mlir/LICENSE.TXT` leaves out the legacy NCSA licence that `llvm/LICENSE.TXT` has |
+| `BuiltinLocationAttributes.h.inc: No such file` | the `mlir-irdl-to-cpp` object does not wait for the generated headers |
+| `cc1plus` killed | out of memory at `-j 6` on 15 GB; MLIR needs `-j 3` there |
+| `cannot find -lMLIR` | `MLIR_LINK_MLIR_DYLIB` follows `llvm-native`'s `LLVM_LINK_LLVM_DYLIB=ON`, but a standalone build makes no `libMLIR.so` |
+| `'mlir-tblgen' … missing` | without `LLVM_BUILD_UTILS` it is not installed; LLVM 23 also stopped exporting it as a CMake target, which `cmc`'s CMakeLists now works around |
+
 ## Bumping the revision
 
 `SRCREV` pins the revision that was verified rather than a moving tag. To move
@@ -121,5 +161,7 @@ it, set it to a pushed commit that contains `CMINUS_BUILD_COMPILER`,
 
 `PV` describes the pinned revision, not the branch tip, so it moves with
 `SRCREV` and not with a release. The pin currently sits past v0.1.3, on the
-LLVM 23 fix, so `PV` is `0.1.3+git`. Both recipes share the pin, so that the
-compiler and the runtime it links in come from one commit.
+LLVM 23 fix and the MLIR path's cross compilation, so `PV` is `0.1.3+git`.
+Both recipes share the pin, so that the compiler and the runtime it links in
+come from one commit. After moving it, `scripts/check-examples.sh` is the
+check that matters.

@@ -334,7 +334,8 @@ subscript is guarded unless `-fno-index-check` is given.
 A second code generator, there for learning MLIR: it produces the same
 programs, but on the way to LLVM IR they pass through MLIR, where every
 lowering step can be printed. It is off by default and nothing else depends on
-it; without it `cmc` has no MLIR code and no MLIR options.
+it; without it `cmc` rejects the MLIR options with a message to rebuild. The
+Yocto layer turns it on (see [Yocto](#yocto)).
 
 ```bash
 sudo apt install -y libmlir-21-dev mlir-21-tools   # from apt.llvm.org
@@ -386,7 +387,7 @@ How C- maps onto MLIR, where it differs from the LLVM table above:
 | `int x[10]` | `memref<10xi32>`, as a `memref.global` or an entry-block `memref.alloca` |
 | `int a[]` parameter | `memref<?xi32>`; an argument of known size goes through `memref.cast` |
 | global | `memref.global` initialized with `dense<0>`, reached by `memref.get_global` |
-| subscript | `arith.index_cast` to `index`, after the negative check |
+| subscript | `arith.index_cast` to `index`, after the negative check; `index` lowers to an integer as wide as a pointer, `i32` on i686 |
 | negative check | std: `cf.cond_br` to a block that calls `__cminus_index_error` and ends in `llvm.unreachable`; cminus: one `cminus.index_check` |
 | `if`, `while` | std: blocks joined by `cf.br`/`cf.cond_br`; cminus: `cminus.if`/`cminus.while` with single-block regions |
 | `return` | std: `func.return`; cminus: `cminus.return`, legal at any depth |
@@ -397,9 +398,14 @@ turns it into C++ in the build directory whenever the file changes.
 [`src/CMinusToCF.cpp`](src/CMinusToCF.cpp) flattens its regions into the
 function's CFG the way MLIR's own `scf → cf` lowering does.
 
+`--target` works as on the default path: the target's data layout and triple
+go onto the MLIR module before lowering, so sizes, alignments and the width of
+`index` are the target's. Through the Yocto layer, all ten end-to-end programs
+give the expected output on i686, x86-64, AArch64 and riscv64, through both
+generators (see [Yocto](#yocto)).
+
 Differences from the default path:
 
-- **Host target only.** `--use-mlir` with `--target` is refused.
 - **Subscripts become `getelementptr inbounds nuw`.** `finalize-memref-to-llvm`
   emits those flags, already at `-O0` (seen with MLIR 21.1.8), where the
   default path deliberately emits a plain `getelementptr` (see above). So on
@@ -412,11 +418,12 @@ Differences from the default path:
 
 ## Yocto
 
-[`meta-cminus/`](meta-cminus/) is a layer with three recipes:
+[`meta-cminus/`](meta-cminus/) is a layer with four recipes:
 
 | Recipe | Runs on | Purpose |
 | :- | :- | :- |
-| `cmc-native` | build host | the compiler; `DEPENDS = "llvm-native"` |
+| `cmc-native` | build host | the compiler, MLIR path included; `DEPENDS = "llvm-native mlir-native"` |
+| `mlir-native` | build host | MLIR, which openembedded-core's LLVM leaves out |
 | `cminus-runtime` | target | `libcminus_rt.a`, linked into compiled programs |
 | `cminus-hello` | target | a `.cm` source turned into a binary in the image |
 
@@ -430,7 +437,7 @@ machine, including the parts that are easy to get wrong: poky's master branch
 is dormant so BitBake and openembedded-core are cloned separately, and BitBake
 will not start without an `en_US.UTF-8` locale.
 
-The split into three follows from Yocto cross-compiling everything: `cmc` runs
+The split follows from Yocto cross-compiling everything: `cmc` runs
 where the build runs, while the runtime is linked into programs for the device.
 Needs LLVM 21, which rules out `walnascar` and older. The layer declares
 `blacksail` alone, the series it was built against.
@@ -439,10 +446,16 @@ Built end to end against openembedded-core master with LLVM 22.1.8, for both
 `qemux86-64` and `qemuarm64`: the binaries run under emulation carrying the
 distribution's hardening flags, and `core-image-minimal` for `qemux86-64`
 lists `cminus-hello` in its rootfs manifest. Rebuilt for `qemux86-64` with
-LLVM 23.1.3, which needed a fix in `cmc` and a newer pin; `qemuarm64` and the
-image have not been rebuilt with 23.
-[meta-cminus/README.md](meta-cminus/README.md) has what the real build caught
-that reading the recipes could not.
+LLVM 23.1.3, which needed a fix in `cmc` and a newer pin; the image has not
+been rebuilt with 23.
+
+With LLVM 23.1.3 and the `cmc` the layer builds, MLIR path included,
+[`meta-cminus/scripts/check-examples.sh`](meta-cminus/scripts/check-examples.sh)
+builds the ten `tests/exec` programs for `qemux86` (i686), `qemux86-64`,
+`qemuarm64` and `qemuriscv64` through the LLVM path and both MLIR generators,
+at `-O0` and `-O2`, and runs them under user-mode qemu: all match their
+expected output. [meta-cminus/README.md](meta-cminus/README.md) has what the
+real build caught that reading the recipes could not.
 
 ## Tests
 
@@ -493,10 +506,11 @@ failure, which is what CI sets: a skip there would be indistinguishable from
 a pass.
 
 `ctest --test-dir build` runs all three. A build with
-`-DCMINUS_ENABLE_MLIR=ON` adds `execution-mlir-std` and
-`execution-mlir-cminus`: the end-to-end suite again, with
-`CMC_FLAGS=--use-mlir=std` or `--use-mlir=cminus`, against the same
-expectations. CI does not build the MLIR path.
+`-DCMINUS_ENABLE_MLIR=ON` adds `execution-mlir-std`,
+`execution-mlir-cminus`, `cross-mlir-std` and `cross-mlir-cminus`: the
+end-to-end and cross suites again, with `CMC_FLAGS=--use-mlir=std` or
+`--use-mlir=cminus`, against the same expectations. CI does not build the
+MLIR path.
 
 ## Continuous integration
 
@@ -538,4 +552,4 @@ tests/exec/       end-to-end compile-link-run tests
 | LLVM IR generation, optimization and object output | done |
 | Cross compilation to any LLVM back end | done |
 | Yocto layer (built end to end) | done |
-| MLIR path, std and cminus dialects (host only, optional) | done |
+| MLIR path, std and cminus dialects (optional; on in the Yocto layer) | done |
