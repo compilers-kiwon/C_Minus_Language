@@ -32,7 +32,8 @@
 #   CROSS_TARGETS="riscv64-linux-gnu" CMC=build/cmc tests/run_cross_tests.sh
 #
 # With a single target, CROSS_CC, CROSS_AR, CROSS_SYSROOT and CROSS_EMU
-# override what is derived from the triple.
+# override what is derived from the triple. CMC_FLAGS adds arguments to every
+# cmc invocation (e.g. --use-mlir=std).
 #
 set -uo pipefail
 
@@ -46,6 +47,7 @@ CROSS_TARGETS="${CROSS_TARGETS:-${CROSS_TARGET:-aarch64-linux-gnu arm-linux-gnue
 read -r -a targets <<< "$CROSS_TARGETS"
 
 required="${CROSS_REQUIRED:-}"
+read -r -a CMC_EXTRA <<< "${CMC_FLAGS:-}"
 
 fatal() {
   echo "cross tests: $1" >&2
@@ -115,7 +117,7 @@ build_and_run() {
   local exe="$work/${triple%%-*}-$name$level"
 
   if ! "$CMC" --target "$triple" --cc "$cc" --runtime "$runtime" "$level" \
-       "$name.cm" -o "$exe" 2>&1; then
+       "${CMC_EXTRA[@]}" "$name.cm" -o "$exe" 2>&1; then
     echo "cmc failed"
     return
   fi

@@ -119,7 +119,7 @@ void printUsage(std::ostream &os, const char *argv0) {
      << "  --dump-symbols    Print the symbol table and stop\n"
      << "\n"
 #if defined(CMINUS_HAVE_MLIR)
-     << "MLIR (host target only):\n"
+     << "MLIR:\n"
      << "  --use-mlir[=std|cminus]\n"
      << "                    Generate code through MLIR: straight to the\n"
      << "                    func/arith/cf/memref dialects (std, the default)\n"
@@ -423,11 +423,6 @@ int main(int argc, char **argv) {
     std::cerr << '\n';
   }
 
-  if (opts.useMLIR && crossing) {
-    std::cerr << "cmc: error: the MLIR path supports only the host target\n";
-    return 1;
-  }
-
   if (opts.output == OutputKind::Executable && crossing &&
       !checkCrossLinkInputs(opts, opts.targetTriple, error)) {
     std::cerr << "cmc: error: " << error << '\n';
@@ -469,7 +464,8 @@ int main(int argc, char **argv) {
     module = cminus::lowerMLIRToLLVM(
         *mlirModule,
         opts.mlirCMinus ? cminus::MLIRFlavor::CMinus : cminus::MLIRFlavor::Std,
-        context, opts.printMLIRAfterAll, error);
+        context, target->triple(), target->dataLayout(),
+        opts.printMLIRAfterAll, error);
     if (!module) {
       std::cerr << "cmc: error: " << error << '\n';
       return 1;

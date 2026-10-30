@@ -91,6 +91,15 @@ if(CMINUS_BUILD_COMPILER)
     find_package(MLIR REQUIRED CONFIG)
     message(STATUS "Using MLIR from ${MLIR_DIR}")
 
+    # MLIRConfig names mlir-tblgen without a path, counting on an imported
+    # target of that name. LLVM 21's add_tablegen exported one; 23's does not,
+    # so fall back to the installed program.
+    if(NOT TARGET ${MLIR_TABLEGEN_EXE})
+      find_program(CMINUS_MLIR_TBLGEN ${MLIR_TABLEGEN_EXE}
+                   HINTS "${MLIR_INSTALL_PREFIX}/bin" REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+      set(MLIR_TABLEGEN_EXE "${CMINUS_MLIR_TBLGEN}")
+    endif()
+
     # The cminus dialect is written in TableGen (ODS); mlir-tblgen generates
     # its C++ into the build directory whenever the .td file changes.
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
@@ -186,4 +195,12 @@ if(CMINUS_BUILD_COMPILER)
   add_test(NAME cross
     COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
             bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cross_tests.sh)
+  if(CMINUS_ENABLE_MLIR)
+    foreach(flavor std cminus)
+      add_test(NAME cross-mlir-${flavor}
+        COMMAND ${CMAKE_COMMAND} -E env CMC=$<TARGET_FILE:cmc>
+                CMC_FLAGS=--use-mlir=${flavor}
+                bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cross_tests.sh)
+    endforeach()
+  endif()
 endif()

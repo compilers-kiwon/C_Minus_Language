@@ -1,6 +1,7 @@
 #include "cminus/MLIRGen.h"
 
 #include "cminus/CMinusDialect.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Module.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -31,9 +32,23 @@ void loadMLIRDialects(mlir::MLIRContext &context) {
 std::unique_ptr<llvm::Module> lowerMLIRToLLVM(mlir::ModuleOp module,
                                               MLIRFlavor flavor,
                                               llvm::LLVMContext &llvmContext,
+                                              const std::string &triple,
+                                              const std::string &dataLayout,
                                               bool printAfterAll,
                                               std::string &error) {
   mlir::MLIRContext *context = module.getContext();
+
+  // The lowering takes sizes and alignments from these attributes, and
+  // translation copies them onto the LLVM module.
+  module->setAttr(mlir::LLVM::LLVMDialect::getDataLayoutAttrName(),
+                  mlir::StringAttr::get(context, dataLayout));
+  module->setAttr(mlir::LLVM::LLVMDialect::getTargetTripleAttrName(),
+                  mlir::StringAttr::get(context, triple));
+  // `index` (subscripts, memref sizes and strides) is as wide as a pointer, as
+  // IRGen.cpp's getelementptr indices are: 32 bits on i686, 64 on x86-64.
+  // MLIR would otherwise take 64 bits whatever the target.
+  const unsigned indexBits =
+      llvm::DataLayout(dataLayout).getPointerSizeInBits(/*AS=*/0);
   mlir::PassManager pm(context);
   if (printAfterAll) {
     // Printing the whole module needs the passes to run one at a time.
@@ -54,10 +69,18 @@ std::unique_ptr<llvm::Module> lowerMLIRToLLVM(mlir::ModuleOp module,
 
   // One pass per dialect rather than convert-to-llvm, so that
   // --mlir-print-ir-after-all shows each dialect going away in turn.
-  pm.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
-  pm.addPass(mlir::createArithToLLVMConversionPass());
-  pm.addPass(mlir::createConvertControlFlowToLLVMPass());
-  pm.addPass(mlir::createConvertFuncToLLVMPass());
+  mlir::FinalizeMemRefToLLVMConversionPassOptions memrefOptions;
+  memrefOptions.indexBitwidth = indexBits;
+  mlir::ArithToLLVMConversionPassOptions arithOptions;
+  arithOptions.indexBitwidth = indexBits;
+  mlir::ConvertControlFlowToLLVMPassOptions cfOptions;
+  cfOptions.indexBitwidth = indexBits;
+  mlir::ConvertFuncToLLVMPassOptions funcOptions;
+  funcOptions.indexBitwidth = indexBits;
+  pm.addPass(mlir::createFinalizeMemRefToLLVMConversionPass(memrefOptions));
+  pm.addPass(mlir::createArithToLLVMConversionPass(arithOptions));
+  pm.addPass(mlir::createConvertControlFlowToLLVMPass(cfOptions));
+  pm.addPass(mlir::createConvertFuncToLLVMPass(funcOptions));
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
   if (mlir::failed(pm.run(module))) {

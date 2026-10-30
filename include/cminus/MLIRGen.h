@@ -46,13 +46,16 @@ mlir::OwningOpRef<mlir::ModuleOp>
 generateCMinusMLIR(const Program &program, mlir::MLIRContext &context,
                    DiagnosticEngine &diags, const MLIRGenOptions &options);
 
-/// Lower `module` to the LLVM dialect and translate it to LLVM IR. Returns
-/// null with `error` set on failure; MLIR has already printed its own
-/// diagnostics by then. printAfterAll prints the whole module to stderr after
-/// every pass.
+/// Lower `module` to the LLVM dialect and translate it to LLVM IR for the
+/// target described by `triple` and `dataLayout`: MLIR's `index` type becomes
+/// an integer as wide as the target's pointers. Returns null with `error` set
+/// on failure; MLIR has already printed its own diagnostics by then.
+/// printAfterAll prints the whole module to stderr after every pass.
 std::unique_ptr<llvm::Module> lowerMLIRToLLVM(mlir::ModuleOp module,
                                               MLIRFlavor flavor,
                                               llvm::LLVMContext &llvmContext,
+                                              const std::string &triple,
+                                              const std::string &dataLayout,
                                               bool printAfterAll,
                                               std::string &error);
 
