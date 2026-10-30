@@ -19,16 +19,20 @@ env:
 
 jobs:
   build-and-test:
-    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.llvm != '21' && format(' / LLVM {0}', matrix.llvm) || '' }}
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.llvm != '21' && format(' / LLVM {0}', matrix.llvm) || '' }}${{ matrix.mlir == 'ON' && ' / MLIR' || '' }}
     runs-on: ubuntu-24.04
     env:
       LLVM_VERSION: ${{ matrix.llvm }}
+      CMINUS_ENABLE_MLIR: ${{ matrix.mlir || 'OFF' }}
     strategy:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
         build_type: [Debug, Release]
         llvm: ["21"]
+        # An axis of its own, so that the MLIR entries below make new jobs
+        # instead of being merged into gcc / Debug.
+        mlir: ["OFF"]
         include:
           # The newest LLVM as well, in Debug so that the assertions in its
           # headers are live in cmc: LLVM 23 made BasicBlock::getTerminator()
@@ -37,6 +41,17 @@ jobs:
           - compiler: gcc
             build_type: Debug
             llvm: "23"
+          # The MLIR path, which adds execution-mlir-* and, for every cross
+          # target, cross-mlir-*: with 21, the version the README builds it
+          # against, and with 23, the one openembedded-core carries.
+          - compiler: gcc
+            build_type: Debug
+            llvm: "21"
+            mlir: "ON"
+          - compiler: gcc
+            build_type: Debug
+            llvm: "23"
+            mlir: "ON"
     steps:
       - uses: actions/checkout@v5
 
@@ -53,6 +68,10 @@ jobs:
             gcc-aarch64-linux-gnu   libc6-dev-arm64-cross \
             gcc-arm-linux-gnueabihf libc6-dev-armhf-cross \
             gcc-riscv64-linux-gnu   libc6-dev-riscv64-cross
+          if [ "$CMINUS_ENABLE_MLIR" = ON ]; then
+            sudo apt-get install -y --no-install-recommends \
+              "libmlir-$LLVM_VERSION-dev" "mlir-$LLVM_VERSION-tools"
+          fi
           # cmc looks for `ld.lld`, which is also the name the C driver goes
           # looking for once it is told -fuse-ld=lld. Only the versioned name
           # is reliably packaged, so make the plain one exist.
@@ -75,6 +94,8 @@ jobs:
             -DCMAKE_C_COMPILER="$CMAKE_C_COMPILER" \
             -DCMAKE_CXX_COMPILER="$CMAKE_CXX_COMPILER" \
             -DLLVM_DIR="/usr/lib/llvm-$LLVM_VERSION/lib/cmake/llvm" \
+            -DCMINUS_ENABLE_MLIR="$CMINUS_ENABLE_MLIR" \
+            -DMLIR_DIR="/usr/lib/llvm-$LLVM_VERSION/lib/cmake/mlir" \
             -DCMINUS_WERROR=ON
 
       - name: Build

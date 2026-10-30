@@ -509,15 +509,18 @@ a pass.
 `-DCMINUS_ENABLE_MLIR=ON` adds `execution-mlir-std`,
 `execution-mlir-cminus`, `cross-mlir-std` and `cross-mlir-cminus`: the
 end-to-end and cross suites again, with `CMC_FLAGS=--use-mlir=std` or
-`--use-mlir=cminus`, against the same expectations. CI does not build the
-MLIR path.
+`--use-mlir=cminus`, against the same expectations. CI runs those too, so
+the MLIR path is checked on aarch64, armhf and riscv64 as well as the host.
 
 ## Continuous integration
 
 [`ci.yml`](.github/workflows/ci.yml) builds with gcc and clang, in Debug and
-Release, with warnings as errors, and runs both suites in each. A fifth job
-repeats them under ASan and UBSan. Reproduce any of it locally with the
-options in the build table above.
+Release, with warnings as errors, and runs every suite in each. Three more gcc
+Debug jobs widen that: one against LLVM 23, whose header assertions caught a
+bug LLVM 21 let through, and two with `-DCMINUS_ENABLE_MLIR=ON`, against
+LLVM 21 and 23. Another repeats the suites under ASan and UBSan, and the last
+parses the Yocto layer. Reproduce any of it locally with the options in the
+build table above.
 
 [`release.yml`](.github/workflows/release.yml) reacts to a `v*` tag: it builds
 Release, refuses to continue unless the tests pass, and publishes a tarball of
