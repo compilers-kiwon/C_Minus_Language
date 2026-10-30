@@ -3,8 +3,10 @@
 These are the steps that were actually run, on Ubuntu 26.04 with 28 cores,
 and again on Ubuntu 24.04 under WSL with 24 cores and 15 GB. Expect a couple
 of hours and roughly 20 GB the first time: LLVM is built from source, and so
-is the cross toolchain. (The WSL run took 33 minutes with 4 threads and
-`-j 6`.)
+is the cross toolchain. On WSL, with 4 threads and `-j 6`, it took 33 minutes
+without `BB_HASHSERVE_UPSTREAM` (13% of sstate from the mirror, LLVM compiled
+locally) and 12 minutes with it (87% from the mirror, LLVM included; only the
+cross toolchain, glibc and this layer's recipes were compiled).
 
 ## 1. Host packages
 
@@ -12,8 +14,12 @@ BitBake needs a handful of tools beyond a normal build environment:
 
 ```bash
 sudo apt install -y git python3 gawk wget diffstat chrpath cpio zstd lz4 file \
-                    rpcsvc-proto
+                    rpcsvc-proto python3-websockets qemu-user
 ```
+
+`python3-websockets` lets BitBake reach the Yocto Project's hash equivalence
+server, which the sstate mirror in step 5 needs; without it the first `bitbake`
+stops at `No module named 'websockets'`. `qemu-user` runs the result in step 7.
 
 `rpcsvc-proto` is there for `rpcgen`. BitBake lists it in `HOSTTOOLS`, and a
 missing entry in that list stops the very first `bitbake` command a second in,
@@ -73,8 +79,10 @@ BB_NUMBER_THREADS = "8"
 PARALLEL_MAKE = "-j 8"
 
 # Download finished task output where the input hashes match, instead of
-# rebuilding it. This is what keeps LLVM from being compiled locally.
+# rebuilding it. The mirror needs the matching hash equivalence server too;
+# both lines together are oe-core's core/yocto/sstate-mirror-cdn fragment.
 SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
+BB_HASHSERVE_UPSTREAM = "wss://hashserv.yoctoproject.org/ws"
 
 # Only needed on a distribution that is not on Yocto's tested list.
 SANITY_TESTED_DISTROS = ""
