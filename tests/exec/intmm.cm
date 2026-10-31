@@ -1,0 +1,68 @@
+/* Stanford Intmm, ported from LLVM test-suite SingleSource/Benchmarks/Stanford.
+   Multiplies two 40x40 matrices of pseudo-random integers; the 41x41
+   arrays (row and column 0 unused, as in the original) are flattened. */
+int ima[1681];
+int imb[1681];
+int imr[1681];
+int seed;
+
+void initrand(void)
+{ seed = 74755;
+}
+
+/* seed = (seed * 1309 + 13849) & 65535, with & 65535 as a remainder. */
+int nextrand(void)
+{ int s;
+  s = seed * 1309 + 13849;
+  seed = s - s / 65536 * 65536;
+  return seed;
+}
+
+void initmatrix(int m[])
+{ int temp;
+  int i;
+  int j;
+  i = 1;
+  while (i <= 40)
+    { j = 1;
+      while (j <= 40)
+        { temp = nextrand();
+          m[i * 41 + j] = temp - (temp / 120) * 120 - 60;
+          j = j + 1; }
+      i = i + 1; }
+}
+
+int innerproduct(int a[], int b[], int row, int column)
+{ int i;
+  int result;
+  result = 0;
+  i = 1;
+  while (i <= 40)
+    { result = result + a[row * 41 + i] * b[i * 41 + column];
+      i = i + 1; }
+  return result;
+}
+
+void intmm(int run)
+{ int i;
+  int j;
+  initrand();
+  initmatrix(ima);
+  initmatrix(imb);
+  i = 1;
+  while (i <= 40)
+    { j = 1;
+      while (j <= 40)
+        { imr[i * 41 + j] = innerproduct(ima, imb, i, j);
+          j = j + 1; }
+      i = i + 1; }
+  output(imr[(run + 1) * 41 + run + 1]);
+}
+
+void main(void)
+{ int i;
+  i = 0;
+  while (i < 10)
+    { intmm(i);
+      i = i + 1; }
+}

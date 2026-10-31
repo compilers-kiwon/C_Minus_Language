@@ -1,0 +1,139 @@
+/* Stanford Puzzle, ported from LLVM test-suite SingleSource/Benchmarks/Stanford.
+   Forest Baskett's compute-bound packing search: 13 pieces in a 5x5x5 box,
+   found after 2005 trials. p[13][512] is flattened, and the thirteen
+   three-deep loops that define the pieces become calls to definepiece.
+   Ten runs instead of a hundred; negative numbers stand in for the errors. */
+int piececount[4];
+int class[13];
+int piecemax[13];
+int puzzl[512];
+int p[6656];
+int n;
+int kount;
+
+int fit(int i, int j)
+{ int k;
+  k = 0;
+  while (k <= piecemax[i])
+    { if (p[i * 512 + k])
+        if (puzzl[j + k]) return 0;
+      k = k + 1; }
+  return 1;
+}
+
+int place(int i, int j)
+{ int k;
+  k = 0;
+  while (k <= piecemax[i])
+    { if (p[i * 512 + k]) puzzl[j + k] = 1;
+      k = k + 1; }
+  piececount[class[i]] = piececount[class[i]] - 1;
+  k = j;
+  while (k <= 511)
+    { if (puzzl[k] == 0) return k;
+      k = k + 1; }
+  return 0;
+}
+
+void removepiece(int i, int j)
+{ int k;
+  k = 0;
+  while (k <= piecemax[i])
+    { if (p[i * 512 + k]) puzzl[j + k] = 0;
+      k = k + 1; }
+  piececount[class[i]] = piececount[class[i]] + 1;
+}
+
+int trial(int j)
+{ int i;
+  int k;
+  kount = kount + 1;
+  i = 0;
+  while (i <= 12)
+    { if (piececount[class[i]] != 0)
+        if (fit(i, j))
+          { k = place(i, j);
+            /* Trial(k) || k == 0, with Trial(k) evaluated first */
+            if (trial(k)) return 1;
+            if (k == 0) return 1;
+            removepiece(i, j); }
+      i = i + 1; }
+  return 0;
+}
+
+/* Piece t fills the box 0..imax by 0..jmax by 0..kmax. */
+void definepiece(int t, int imax, int jmax, int kmax, int cls)
+{ int i;
+  int j;
+  int k;
+  i = 0;
+  while (i <= imax)
+    { j = 0;
+      while (j <= jmax)
+        { k = 0;
+          while (k <= kmax)
+            { p[t * 512 + i + 8 * (j + 8 * k)] = 1;
+              k = k + 1; }
+          j = j + 1; }
+      i = i + 1; }
+  class[t] = cls;
+  piecemax[t] = imax + 8 * jmax + 64 * kmax;
+}
+
+void puzzle(void)
+{ int i;
+  int j;
+  int k;
+  int m;
+  m = 0;
+  while (m <= 511)
+    { puzzl[m] = 1;
+      m = m + 1; }
+  i = 1;
+  while (i <= 5)
+    { j = 1;
+      while (j <= 5)
+        { k = 1;
+          while (k <= 5)
+            { puzzl[i + 8 * (j + 8 * k)] = 0;
+              k = k + 1; }
+          j = j + 1; }
+      i = i + 1; }
+  m = 0;
+  while (m <= 6655)
+    { p[m] = 0;
+      m = m + 1; }
+  definepiece(0, 3, 1, 0, 0);
+  definepiece(1, 1, 0, 3, 0);
+  definepiece(2, 0, 3, 1, 0);
+  definepiece(3, 1, 3, 0, 0);
+  definepiece(4, 3, 0, 1, 0);
+  definepiece(5, 0, 1, 3, 0);
+  definepiece(6, 2, 0, 0, 1);
+  definepiece(7, 0, 2, 0, 1);
+  definepiece(8, 0, 0, 2, 1);
+  definepiece(9, 1, 1, 0, 2);
+  definepiece(10, 1, 0, 1, 2);
+  definepiece(11, 0, 1, 1, 2);
+  definepiece(12, 1, 1, 1, 3);
+  piececount[0] = 13;
+  piececount[1] = 3;
+  piececount[2] = 1;
+  piececount[3] = 1;
+  m = 1 + 8 * (1 + 8 * 1);
+  kount = 0;
+  if (fit(0, m)) n = place(0, m);
+  else output(0 - 1);
+  if (trial(n) == 0) output(0 - 2);
+  else if (kount != 2005) output(0 - 3);
+  output(n);
+  output(kount);
+}
+
+void main(void)
+{ int i;
+  i = 0;
+  while (i < 10)
+    { puzzle();
+      i = i + 1; }
+}

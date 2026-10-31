@@ -1,0 +1,11 @@
+/* fib2, ported from LLVM test-suite SingleSource/Benchmarks/Shootout (Doug
+   Bagley's shootout). Doubly recursive, with fib(0) = fib(1) = 1. N is 25
+   instead of 43. */
+int fib(int n)
+{ if (n < 2) return 1;
+  return fib(n - 2) + fib(n - 1);
+}
+
+void main(void)
+{ output(fib(25));
+}

@@ -82,10 +82,10 @@ user-mode qemu, through the LLVM path and both MLIR generators, at `-O0` and
 
 | `MACHINE` | Target | LLVM path | `--use-mlir=std` | `--use-mlir=cminus` |
 | :- | :- | :- | :- | :- |
-| `qemux86` | `i686-oe-linux` | 10/10 | 10/10 | 10/10 |
-| `qemux86-64` | `x86_64-oe-linux` | 10/10 | 10/10 | 10/10 |
-| `qemuarm64` | `aarch64-oe-linux` | 10/10 | 10/10 | 10/10 |
-| `qemuriscv64` | `riscv64-oe-linux` | 10/10 | 10/10 | 10/10 |
+| `qemux86` | `i686-oe-linux` | 26/26 | 26/26 | 26/26 |
+| `qemux86-64` | `x86_64-oe-linux` | 26/26 | 26/26 | 26/26 |
+| `qemuarm64` | `aarch64-oe-linux` | 26/26 | 26/26 | 26/26 |
+| `qemuriscv64` | `riscv64-oe-linux` | 26/26 | 26/26 | 26/26 |
 
 The script fails if any program's output or exit status differs from its
 `.expected` file; it was checked to report a deliberately wrong one.

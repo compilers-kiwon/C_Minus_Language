@@ -1,0 +1,14 @@
+/* ackermann, ported from LLVM test-suite SingleSource/Benchmarks/Shootout
+   (Doug Bagley's shootout). Prints 3, n and Ack(3, n), the numbers in the
+   original's "Ack(3,n): value". n is 7 instead of 8. */
+int ack(int m, int n)
+{ if (m == 0) return n + 1;
+  if (n == 0) return ack(m - 1, 1);
+  return ack(m - 1, ack(m, n - 1));
+}
+
+void main(void)
+{ output(3);
+  output(7);
+  output(ack(3, 7));
+}

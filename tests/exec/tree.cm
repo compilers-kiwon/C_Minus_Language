@@ -1,0 +1,96 @@
+/* Stanford Tree, ported from LLVM test-suite SingleSource/Benchmarks/Stanford.
+   Builds a binary search tree from 5000 pseudo-random integers and checks
+   it in order. The malloc'd nodes become indexes into three arrays, with 0
+   as nil. Ten runs instead of a hundred; -1 stands in for the error message. */
+int sortlist[5001];
+int biggest;
+int littlest;
+int seed;
+int left[5001];
+int right[5001];
+int val[5001];
+int nodes;
+
+void initrand(void)
+{ seed = 74755;
+}
+
+/* seed = (seed * 1309 + 13849) & 65535, with & 65535 as a remainder. */
+int nextrand(void)
+{ int s;
+  s = seed * 1309 + 13849;
+  seed = s - s / 65536 * 65536;
+  return seed;
+}
+
+void initarr(void)
+{ int i;
+  int temp;
+  initrand();
+  biggest = 0;
+  littlest = 0;
+  i = 1;
+  while (i <= 5000)
+    { temp = nextrand();
+      sortlist[i] = temp - (temp / 100000) * 100000 - 50000;
+      if (sortlist[i] > biggest) biggest = sortlist[i];
+      else if (sortlist[i] < littlest) littlest = sortlist[i];
+      i = i + 1; }
+}
+
+int createnode(int n)
+{ nodes = nodes + 1;
+  left[nodes] = 0;
+  right[nodes] = 0;
+  val[nodes] = n;
+  return nodes;
+}
+
+void insert(int n, int t)
+{ if (n > val[t])
+    { if (left[t] == 0) left[t] = createnode(n);
+      else insert(n, left[t]); }
+  else if (n < val[t])
+    { if (right[t] == 0) right[t] = createnode(n);
+      else insert(n, right[t]); }
+}
+
+/* result = Checktree(child) && result, with the call evaluated first */
+int checktree(int t)
+{ int result;
+  int r;
+  result = 1;
+  if (left[t] != 0)
+    { if (val[left[t]] <= val[t]) result = 0;
+      else
+        { r = checktree(left[t]);
+          result = r * result; } }
+  if (right[t] != 0)
+    { if (val[right[t]] >= val[t]) result = 0;
+      else
+        { r = checktree(right[t]);
+          result = r * result; } }
+  return result;
+}
+
+void trees(int run)
+{ int i;
+  int root;
+  initarr();
+  nodes = 0;
+  root = createnode(sortlist[1]);
+  i = 2;
+  while (i <= 5000)
+    { insert(sortlist[i], root);
+      i = i + 1; }
+  output(sortlist[2 + run]);
+  if (checktree(root) == 0) output(0 - 1);
+}
+
+void main(void)
+{ int i;
+  i = 0;
+  while (i < 10)
+    { trees(i);
+      i = i + 1; }
+}

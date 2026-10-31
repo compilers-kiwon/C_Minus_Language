@@ -1,0 +1,30 @@
+/* sieve, ported from LLVM test-suite SingleSource/Benchmarks/Shootout (Doug
+   Bagley's shootout). Counts the primes up to 8192, NUM times. NUM is 20
+   instead of 170000. */
+int flags[8193];
+
+void main(void)
+{ int num;
+  int i;
+  int k;
+  int count;
+  num = 20;
+  count = 0;
+  while (num > 0)
+    { num = num - 1;
+      count = 0;
+      i = 2;
+      while (i <= 8192)
+        { flags[i] = 1;
+          i = i + 1; }
+      i = 2;
+      while (i <= 8192)
+        { if (flags[i])
+            { k = i + i;
+              while (k <= 8192)
+                { flags[k] = 0;
+                  k = k + i; }
+              count = count + 1; }
+          i = i + 1; } }
+  output(count);
+}

@@ -1,0 +1,62 @@
+/* Stanford Bubble, ported from LLVM test-suite SingleSource/Benchmarks/Stanford.
+   Bubble-sorts 500 pseudo-random integers. Ten runs instead of a hundred;
+   -1 stands in for the error message. */
+int sortlist[501];
+int biggest;
+int littlest;
+int seed;
+
+void initrand(void)
+{ seed = 74755;
+}
+
+/* seed = (seed * 1309 + 13849) & 65535, with & 65535 as a remainder. */
+int nextrand(void)
+{ int s;
+  s = seed * 1309 + 13849;
+  seed = s - s / 65536 * 65536;
+  return seed;
+}
+
+void initarr(void)
+{ int i;
+  int temp;
+  initrand();
+  biggest = 0;
+  littlest = 0;
+  i = 1;
+  while (i <= 500)
+    { temp = nextrand();
+      sortlist[i] = temp - (temp / 100000) * 100000 - 50000;
+      if (sortlist[i] > biggest) biggest = sortlist[i];
+      else if (sortlist[i] < littlest) littlest = sortlist[i];
+      i = i + 1; }
+}
+
+void bubble(int run)
+{ int i;
+  int j;
+  int top;
+  initarr();
+  top = 500;
+  while (top > 1)
+    { i = 1;
+      while (i < top)
+        { if (sortlist[i] > sortlist[i + 1])
+            { j = sortlist[i];
+              sortlist[i] = sortlist[i + 1];
+              sortlist[i + 1] = j; }
+          i = i + 1; }
+      top = top - 1; }
+  if (sortlist[1] != littlest) output(0 - 1);
+  else if (sortlist[500] != biggest) output(0 - 1);
+  output(sortlist[run + 1]);
+}
+
+void main(void)
+{ int i;
+  i = 0;
+  while (i < 10)
+    { bubble(i);
+      i = i + 1; }
+}

@@ -1,0 +1,61 @@
+/* Stanford Queens, ported from LLVM test-suite SingleSource/Benchmarks/Stanford.
+   The eight queens problem, solved 50 times per run. The flag passed by
+   pointer becomes a global, and && becomes a product of 0/1 values. Ten runs
+   instead of a hundred; -1 stands in for the error message. */
+int q;
+
+void try(int i, int a[], int b[], int c[], int x[])
+{ int j;
+  j = 0;
+  q = 0;
+  while ((q == 0) * (j != 8))
+    { j = j + 1;
+      q = 0;
+      if (b[j] * a[i + j] * c[i - j + 7])
+        { x[i] = j;
+          b[j] = 0;
+          a[i + j] = 0;
+          c[i - j + 7] = 0;
+          if (i < 8)
+            { try(i + 1, a, b, c, x);
+              if (q == 0)
+                { b[j] = 1;
+                  a[i + j] = 1;
+                  c[i - j + 7] = 1; } }
+          else q = 1; } }
+}
+
+void doit(void)
+{ int i;
+  int a[9];
+  int b[17];
+  int c[15];
+  int x[9];
+  i = 0 - 7;
+  while (i <= 16)
+    { if (i >= 1)
+        if (i <= 8) a[i] = 1;
+      if (i >= 2) b[i] = 1;
+      if (i <= 7) c[i + 7] = 1;
+      i = i + 1; }
+  /* a and b swapped on purpose: the original passes them this way. */
+  try(1, b, a, c, x);
+  if (q == 0) output(0 - 1);
+}
+
+void queens(int run)
+{ int i;
+  i = 1;
+  while (i <= 50)
+    { doit();
+      i = i + 1; }
+  output(run + 1);
+}
+
+void main(void)
+{ int i;
+  i = 0;
+  while (i < 10)
+    { queens(i);
+      i = i + 1; }
+}

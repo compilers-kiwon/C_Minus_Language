@@ -1,0 +1,104 @@
+/* Stanford Towers, ported from LLVM test-suite SingleSource/Benchmarks/Stanford.
+   Towers of Hanoi for 14 discs on three linked stacks; the cell structs
+   become two parallel arrays. Ten runs instead of a hundred; a negative
+   number stands in for each error message. */
+int stack[4];
+int celldisc[19];
+int cellnext[19];
+int freelist;
+int movesdone;
+
+void fail(int code)
+{ output(0 - code);
+}
+
+void makenull(int s)
+{ stack[s] = 0;
+}
+
+int getelement(void)
+{ int temp;
+  temp = 0;
+  if (freelist > 0)
+    { temp = freelist;
+      freelist = cellnext[freelist]; }
+  else fail(1);
+  return temp;
+}
+
+void push(int i, int s)
+{ int errorfound;
+  int localel;
+  errorfound = 0;
+  if (stack[s] > 0)
+    if (celldisc[stack[s]] <= i)
+      { errorfound = 1;
+        fail(2); }
+  if (errorfound == 0)
+    { localel = getelement();
+      cellnext[localel] = stack[s];
+      stack[s] = localel;
+      celldisc[localel] = i; }
+}
+
+void init(int s, int n)
+{ int discctr;
+  makenull(s);
+  discctr = n;
+  while (discctr >= 1)
+    { push(discctr, s);
+      discctr = discctr - 1; }
+}
+
+int pop(int s)
+{ int temp;
+  int tempone;
+  if (stack[s] > 0)
+    { tempone = celldisc[stack[s]];
+      temp = cellnext[stack[s]];
+      cellnext[stack[s]] = freelist;
+      freelist = stack[s];
+      stack[s] = temp;
+      return tempone; }
+  else fail(3);
+  return 0;
+}
+
+void move(int from, int to)
+{ push(pop(from), to);
+  movesdone = movesdone + 1;
+}
+
+void tower(int i, int j, int k)
+{ int other;
+  if (k == 1) move(i, j);
+  else
+    { other = 6 - i - j;
+      tower(i, other, k - 1);
+      move(i, j);
+      tower(other, j, k - 1); }
+}
+
+void towers(void)
+{ int i;
+  i = 1;
+  while (i <= 18)
+    { cellnext[i] = i - 1;
+      i = i + 1; }
+  freelist = 18;
+  init(1, 14);
+  makenull(2);
+  makenull(3);
+  movesdone = 0;
+  tower(1, 2, 14);
+  if (movesdone != 16383) fail(4);
+  output(movesdone);
+}
+
+void main(void)
+{ int i;
+  i = 0;
+  while (i < 10)
+    { towers();
+      i = i + 1; }
+}

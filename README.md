@@ -402,7 +402,7 @@ function's CFG the way MLIR's own `scf → cf` lowering does.
 
 `--target` works as on the default path: the target's data layout and triple
 go onto the MLIR module before lowering, so sizes, alignments and the width of
-`index` are the target's. Through the Yocto layer, all ten end-to-end programs
+`index` are the target's. Through the Yocto layer, all 26 end-to-end programs
 give the expected output on i686, x86-64, AArch64 and riscv64, through both
 generators (see [Yocto](#yocto)).
 
@@ -453,7 +453,7 @@ in its rootfs prints 6 against the rootfs's own libc.
 
 With LLVM 23.1.3 and the `cmc` the layer builds, MLIR path included,
 [`meta-cminus/scripts/check-examples.sh`](meta-cminus/scripts/check-examples.sh)
-builds the ten `tests/exec` programs for `qemux86` (i686), `qemux86-64`,
+builds the 26 `tests/exec` programs for `qemux86` (i686), `qemux86-64`,
 `qemuarm64` and `qemuriscv64` through the LLVM path and both MLIR generators,
 at `-O0` and `-O2`, and runs them under user-mode qemu: all match their
 expected output. [meta-cminus/README.md](meta-cminus/README.md) has what the
@@ -485,6 +485,16 @@ followed by a separate link, which keeps that path honest:
 ```bash
 CMC=build/cmc tests/run_exec_tests.sh
 ```
+
+Sixteen of the cases are integer benchmarks ported from the LLVM test-suite:
+the Stanford suite (`perm`, `towers`, `queens`, `intmm`, `puzzle`, `quick`,
+`bubble`, `tree`), two Benchmarks Game programs (`fannkuch`, `nsieve`) and six
+from Doug Bagley's shootout (`ackermann`, `fib`, `matrix`, `nestedloop`,
+`sieve`, `ary`). Their `.expected` files come from the original C programs,
+built with gcc on x86-64 at the sizes the ports use, rather than from `cmc`:
+every number matched, through the default path and both MLIR generators at
+`-O0` and `-O2`. Each port's header says what had to change. Floating point,
+strings and structs keep the rest of those suites out of reach.
 
 Cross suite. The same programs and the same expectations, built for other
 architectures and run under an emulator: what a C- program prints does not

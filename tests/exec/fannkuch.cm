@@ -1,0 +1,86 @@
+/* fannkuch, ported from LLVM test-suite SingleSource/Benchmarks/BenchmarkGame
+   (Heiner Marxen's entry in the Computer Language Shootout). Prints the first
+   30 permutations, each as one number, then n and the maximum number of
+   pancake flips. n is 7 instead of 11. */
+int perm[7];
+int permone[7];
+int count[7];
+
+int fannkuch(int n)
+{ int flips;
+  int flipsmax;
+  int r;
+  int i;
+  int j;
+  int k;
+  int t;
+  int didpr;
+  int last;
+  int permzero;
+  int value;
+  int rotated;
+  last = n - 1;
+  i = 0;
+  while (i < n)
+    { permone[i] = i;
+      i = i + 1; }
+  r = n;
+  didpr = 0;
+  flipsmax = 0;
+  while (1)
+    { if (didpr < 30)
+        { value = 0;
+          i = 0;
+          while (i < n)
+            { value = value * 10 + 1 + permone[i];
+              i = i + 1; }
+          output(value);
+          didpr = didpr + 1; }
+      while (r != 1)
+        { count[r - 1] = r;
+          r = r - 1; }
+      /* !(permone[0] == 0 || permone[last] == last) */
+      if ((permone[0] == 0) + (permone[last] == last) == 0)
+        { flips = 0;
+          i = 1;
+          while (i < n)
+            { perm[i] = permone[i];
+              i = i + 1; }
+          k = permone[0];
+          while (k != 0)
+            { i = 1;
+              j = k - 1;
+              while (i < j)
+                { t = perm[i];
+                  perm[i] = perm[j];
+                  perm[j] = t;
+                  i = i + 1;
+                  j = j - 1; }
+              flips = flips + 1;
+              j = perm[k];
+              perm[k] = k;
+              k = j; }
+          if (flipsmax < flips) flipsmax = flips; }
+      rotated = 0;
+      while (rotated == 0)
+        { if (r == n) return flipsmax;
+          /* rotate down permone[0..r] by one */
+          permzero = permone[0];
+          i = 0;
+          while (i < r)
+            { k = i + 1;
+              permone[i] = permone[k];
+              i = k; }
+          permone[r] = permzero;
+          count[r] = count[r] - 1;
+          if (count[r] > 0) rotated = 1;
+          else r = r + 1; } }
+  return flipsmax;
+}
+
+void main(void)
+{ int flips;
+  flips = fannkuch(7);
+  output(7);
+  output(flips);
+}
