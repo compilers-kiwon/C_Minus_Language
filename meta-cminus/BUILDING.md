@@ -162,9 +162,9 @@ cd ~/yocto/oe/build
 It builds `cminus-hello` for each machine first, which stages `cmc-native`,
 the cross toolchain and the target sysroot, then hands them to the
 repository's `tests/run_cross_tests.sh`. Every line should end in
-`10 passed, 0 failed`, and the script exits non-zero otherwise. Each new
-machine costs a cross toolchain and a glibc, about ten minutes with the sstate
-mirror.
+`26 passed, 0 failed`, one pass per program in `tests/exec`, and the script
+exits non-zero otherwise. Each new machine costs a cross toolchain and a
+glibc, about ten minutes with the sstate mirror.
 
 ## An image
 

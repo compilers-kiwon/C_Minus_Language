@@ -7,10 +7,10 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=0813489dfd365ec0eee0107c4d289c63"
 
 SRC_URI = "git://github.com/compilers-kiwon/C_Minus_Language.git;protocol=https;branch=main"
-# Pinned to v0.2.0's commit rather than the tag: a tag can be moved, a commit
-# cannot. PV describes the pin and not the branch.
-SRCREV = "2f24b8dcd4edec8702a6dd942c996eba701695f2"
-PV = "0.2.0"
+# Pinned to a commit rather than a tag: a tag can be moved, a commit cannot.
+# PV describes the pin and not the branch.
+SRCREV = "f5e97a785f312f448346a23a1b2952d59ef9f82e"
+PV = "0.2.0+git"
 
 DEPENDS = "llvm-native"
 

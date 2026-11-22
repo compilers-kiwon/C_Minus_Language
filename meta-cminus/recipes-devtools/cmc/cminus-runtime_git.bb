@@ -10,8 +10,8 @@ SRC_URI = "git://github.com/compilers-kiwon/C_Minus_Language.git;protocol=https;
 # The same revision as cmc-native, so that the compiler and the runtime it
 # links in always come from one commit. PV describes the pin and not the
 # branch.
-SRCREV = "2f24b8dcd4edec8702a6dd942c996eba701695f2"
-PV = "0.2.0"
+SRCREV = "f5e97a785f312f448346a23a1b2952d59ef9f82e"
+PV = "0.2.0+git"
 
 inherit cmake
 

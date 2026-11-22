@@ -45,13 +45,16 @@ PACKAGECONFIG:remove:pn-cmc-native = "mlir"
 
 ## Requirements
 
-LLVM 21 or newer. `walnascar` carries 20.1, so the recipe configures and then
-fails its version floor; every older series fails the same way.
+LLVM 23 or newer for `cmc`'s MLIR path, which `PACKAGECONFIG` turns on, and
+21 or newer without it. `walnascar` carries 20.1, so the recipe configures and
+then fails its version floor either way; every older series fails the same
+way.
 
-`LAYERSERIES_COMPAT` names `blacksail` alone, which is narrower than that floor
-and deliberately so. `wrynose` carries LLVM 22 and would very likely build, but
-nothing here has been run against it, and this layer declares what was verified
-rather than what ought to work. Add it once a build says so.
+`LAYERSERIES_COMPAT` names `blacksail` alone, deliberately. `wrynose` carries
+LLVM 22, enough once `PACKAGECONFIG:remove:pn-cmc-native = "mlir"` leaves the
+MLIR path out, but nothing here has been run against it, and this layer
+declares what was verified rather than what ought to work. Add it once a build
+says so.
 
 ## Use
 
@@ -74,7 +77,7 @@ IMAGE_INSTALL:append = " cminus-hello"
 
 ## Status
 
-With the current pin, against openembedded-core master `b62d5e6` and LLVM
+With the current pin, against openembedded-core master `c2ea956` and LLVM
 23.1.3, [scripts/check-examples.sh](scripts/check-examples.sh) builds every
 program in `tests/exec` with the `cmc` this layer builds and runs it under
 user-mode qemu, through the LLVM path and both MLIR generators, at `-O0` and
@@ -170,8 +173,9 @@ it, set it to a pushed commit that contains `CMINUS_BUILD_COMPILER`,
 `CMINUS_BUILD_RUNTIME` and `LICENSE`, and rerun `bitbake cminus-hello`.
 
 `PV` describes the pinned revision, not the branch tip, so it moves with
-`SRCREV` and not with a release. The pin currently sits on v0.2.0's commit,
-so `PV` is `0.2.0`.
+`SRCREV` and not with a release. The pin currently sits on `f5e97a7`, the
+commit after v0.2.0 that holds the MLIR path to MLIR 23, so `PV` is
+`0.2.0+git`.
 Both recipes share the pin, so that the compiler and the runtime it links in
 come from one commit. After moving it, `scripts/check-examples.sh` is the
 check that matters.
