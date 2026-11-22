@@ -142,6 +142,19 @@ if(CMINUS_BUILD_COMPILER)
     # SYSTEM: the generated .inc files trip -Wunused-parameter, as MLIR's own do.
     target_include_directories(cmc SYSTEM PRIVATE
       ${CMAKE_CURRENT_BINARY_DIR} ${MLIR_INCLUDE_DIRS})
+    # SYSTEM does not cover one more. Each generated op hashes its properties,
+    # of which cminus ops have none, with an empty llvm::hash_combine(); in
+    # LLVM 23 that passes a one-byte buffer it never filled to xxh3_64bits,
+    # with a length of zero. Nothing reads the byte, but an optimizing GCC
+    # cannot see into xxh3_64bits and reports 'buf' as maybe used
+    # uninitialized, which CMINUS_WERROR makes fatal. Only CMinusDialect.cpp
+    # compiles the generated op definitions, so the warning goes off there
+    # alone, and for GCC alone: clang has no such warning and rejects the
+    # option under -Werror.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      set_source_files_properties(src/CMinusDialect.cpp PROPERTIES
+        COMPILE_OPTIONS -Wno-maybe-uninitialized)
+    endif()
     target_compile_definitions(cmc PRIVATE CMINUS_HAVE_MLIR)
     target_link_libraries(cmc PRIVATE
       MLIRIR MLIRPass
