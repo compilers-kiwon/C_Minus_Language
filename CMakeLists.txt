@@ -29,7 +29,7 @@ option(CMINUS_BUILD_COMPILER "Build the cmc compiler (requires LLVM)" ON)
 option(CMINUS_BUILD_RUNTIME "Build libcminus_rt for the current toolchain" ON)
 # A second code generator that goes through MLIR, for learning MLIR; off by
 # default so that nothing else depends on it.
-option(CMINUS_ENABLE_MLIR "Add the MLIR path to cmc (--use-mlir; requires MLIR)" OFF)
+option(CMINUS_ENABLE_MLIR "Add the MLIR path to cmc (--use-mlir; requires MLIR 23 or newer)" OFF)
 
 if(NOT CMINUS_BUILD_COMPILER AND NOT CMINUS_BUILD_RUNTIME)
   message(FATAL_ERROR
@@ -49,6 +49,16 @@ if(CMINUS_BUILD_COMPILER)
     message(FATAL_ERROR
       "LLVM 21 or newer is required, but ${LLVM_PACKAGE_VERSION} was found at "
       "${LLVM_DIR}. Point CMake at a newer one with -DLLVM_DIR=<path>.")
+  endif()
+  # The MLIR path asks for more: 23 is the only release it is built and tested
+  # against, and its generators use ConstantIntOp::create, which MLIR 21's
+  # ConstantIntOp does not have. MLIR itself is held to the same release as
+  # LLVM further down, so checking LLVM's version covers both.
+  if(CMINUS_ENABLE_MLIR AND LLVM_PACKAGE_VERSION VERSION_LESS 23)
+    message(FATAL_ERROR
+      "The MLIR path needs LLVM and MLIR 23 or newer, but LLVM "
+      "${LLVM_PACKAGE_VERSION} was found at ${LLVM_DIR}. Point -DLLVM_DIR and "
+      "-DMLIR_DIR at a newer release, or configure with -DCMINUS_ENABLE_MLIR=OFF.")
   endif()
 
   message(STATUS "Using LLVM ${LLVM_PACKAGE_VERSION} from ${LLVM_DIR}")
@@ -88,12 +98,24 @@ if(CMINUS_BUILD_COMPILER)
   target_link_libraries(cmc PRIVATE ${CMINUS_LLVM_LIBS})
 
   if(CMINUS_ENABLE_MLIR)
-    find_package(MLIR REQUIRED CONFIG)
+    # MLIR links against the LLVM it was built with, so it has to come from
+    # the same release as the LLVM found above. Asking for exactly that version
+    # stops a mismatch here -- a build directory given a new MLIR_DIR while
+    # its cache still holds the old LLVM_DIR, say -- instead of letting it
+    # surface as a page of errors where LLVM's and MLIR's headers meet in the
+    # compiler. The version is put together from its parts because
+    # LLVM_PACKAGE_VERSION carries a suffix in development builds
+    # ("24.0.0git"), which find_package rejects.
+    find_package(MLIR
+      ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}
+      EXACT REQUIRED CONFIG)
     message(STATUS "Using MLIR from ${MLIR_DIR}")
 
     # MLIRConfig names mlir-tblgen without a path, counting on an imported
-    # target of that name. LLVM 21's add_tablegen exported one; 23's does not,
-    # so fall back to the installed program.
+    # target of that name. An MLIR built in-tree with LLVM exports one, as
+    # apt.llvm.org's does; a standalone build such as meta-cminus's
+    # mlir-native installs the program without the target, so fall back to
+    # the installed program.
     if(NOT TARGET ${MLIR_TABLEGEN_EXE})
       find_program(CMINUS_MLIR_TBLGEN ${MLIR_TABLEGEN_EXE}
                    HINTS "${MLIR_INSTALL_PREFIX}/bin" REQUIRED NO_CMAKE_FIND_ROOT_PATH)

@@ -30,7 +30,7 @@ jobs:
         compiler: [gcc, clang]
         build_type: [Debug, Release]
         llvm: ["21"]
-        # An axis of its own, so that the MLIR entries below make new jobs
+        # An axis of its own, so that the MLIR entry below makes a new job
         # instead of being merged into gcc / Debug.
         mlir: ["OFF"]
         include:
@@ -42,12 +42,8 @@ jobs:
             build_type: Debug
             llvm: "23"
           # The MLIR path, which adds execution-mlir-* and, for every cross
-          # target, cross-mlir-*: with 21, the version the README builds it
-          # against, and with 23, the one openembedded-core carries.
-          - compiler: gcc
-            build_type: Debug
-            llvm: "21"
-            mlir: "ON"
+          # target, cross-mlir-*: against 23, the oldest release CMake accepts
+          # for it and the one openembedded-core carries.
           - compiler: gcc
             build_type: Debug
             llvm: "23"

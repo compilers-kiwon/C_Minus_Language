@@ -161,7 +161,7 @@ which line answers which:
 | `BuiltinLocationAttributes.h.inc: No such file` | the `mlir-irdl-to-cpp` object does not wait for the generated headers |
 | `cc1plus` killed | out of memory at `-j 6` on 15 GB; MLIR needs `-j 3` there |
 | `cannot find -lMLIR` | `MLIR_LINK_MLIR_DYLIB` follows `llvm-native`'s `LLVM_LINK_LLVM_DYLIB=ON`, but a standalone build makes no `libMLIR.so` |
-| `'mlir-tblgen' … missing` | without `LLVM_BUILD_UTILS` it is not installed; LLVM 23 also stopped exporting it as a CMake target, which `cmc`'s CMakeLists now works around |
+| `'mlir-tblgen' … missing` | without `LLVM_BUILD_UTILS` it is not installed; even with it, a standalone build does not export it as a CMake target (apt.llvm.org's in-tree build does), which `cmc`'s CMakeLists works around |
 
 ## Bumping the revision
 

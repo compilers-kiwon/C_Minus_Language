@@ -21,8 +21,9 @@ inherit cmake pkgconfig native
 # the installed LLVM through find_package instead of building LLVM again.
 # MLIR_LINK_MLIR_DYLIB would follow llvm-native's LLVM_LINK_LLVM_DYLIB=ON and
 # link the tools against a libMLIR.so that a standalone build never makes.
-# LLVM_BUILD_UTILS is what makes add_tablegen install and export mlir-tblgen,
-# which cmc's own TableGen step runs; left unset it is built but not installed.
+# LLVM_BUILD_UTILS is what makes add_tablegen install mlir-tblgen, which cmc's
+# own TableGen step runs; left unset it is built but not installed. It is still
+# not exported as a CMake target, which cmc's CMakeLists works around.
 OECMAKE_SOURCEPATH = "${S}/mlir"
 
 EXTRA_OECMAKE += "-DCMAKE_BUILD_TYPE=Release \

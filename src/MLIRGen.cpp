@@ -716,12 +716,9 @@ mlir::Value MLIRGenerator::emitCondition(const Expr &expr) {
 
 mlir::Value MLIRGenerator::int32(SourceLocation where, long long value) {
   // IRGen.cpp의 int32()처럼 i32로 자른다.
-  // ConstantIntOp이 아니라 ConstantOp: MLIR 21의 ConstantIntOp은 손으로 쓴
-  // 클래스라 Op::create가 없고, MLIR 23은 builder.create<Op>를 deprecated로
-  // 바꿨다. 두 버전 모두 되는 쪽이고 결과는 같은 arith.constant다.
-  return mlir::arith::ConstantOp::create(
-      builder_, loc(where),
-      builder_.getI32IntegerAttr(static_cast<std::int32_t>(value)));
+  return mlir::arith::ConstantIntOp::create(builder_, loc(where),
+                                            builder_.getI32Type(),
+                                            static_cast<std::int32_t>(value));
 }
 
 } // namespace

@@ -80,7 +80,7 @@ Two options exist for checking rather than developing:
 | `-DCMINUS_SANITIZERS=ON` | Build with ASan and UBSan, not recovering from a report |
 | `-DCMINUS_BUILD_RUNTIME=OFF` | Compiler only; nothing is built for the target |
 | `-DCMINUS_BUILD_COMPILER=OFF` | Runtime only, and LLVM is not needed at all |
-| `-DCMINUS_ENABLE_MLIR=ON` | Add the [MLIR path](#the-mlir-path); needs MLIR as well |
+| `-DCMINUS_ENABLE_MLIR=ON` | Add the [MLIR path](#the-mlir-path); needs LLVM and MLIR 23 or newer |
 
 The last two exist because the compiler and the runtime end up on different
 machines as soon as anything is cross-compiled, and a build system that knows
@@ -340,12 +340,20 @@ it; without it `cmc` rejects the MLIR options with a message to rebuild. The
 Yocto layer turns it on (see [Yocto](#yocto)).
 
 ```bash
-sudo apt install -y libmlir-21-dev mlir-21-tools   # from apt.llvm.org
+sudo apt install -y llvm-23-dev libmlir-23-dev mlir-23-tools   # from apt.llvm.org
 cmake -S . -B build-mlir -G Ninja -DCMINUS_ENABLE_MLIR=ON \
-      -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
-      -DMLIR_DIR=/usr/lib/llvm-21/lib/cmake/mlir
+      -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
+      -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir
 cmake --build build-mlir
 ```
+
+The MLIR path needs LLVM and MLIR 23 or newer, with `LLVM_DIR` and `MLIR_DIR`
+naming the same release, because MLIR links against the LLVM it was built
+with; CMake stops otherwise. apt.llvm.org's `libmlir-N-dev` packages conflict
+with one another, so installing one version removes the other, and a build
+directory configured for the removed one has to start again from an empty
+cache, with both paths changed: `cmake --fresh` (CMake 3.24 and later) or a
+new directory.
 
 | Option | Effect |
 | :- | :- |
@@ -409,7 +417,7 @@ generators (see [Yocto](#yocto)).
 Differences from the default path:
 
 - **Subscripts become `getelementptr inbounds nuw`.** `finalize-memref-to-llvm`
-  emits those flags, already at `-O0` (seen with MLIR 21.1.8), where the
+  emits those flags, already at `-O0` (seen with MLIR 23.1.6), where the
   default path deliberately emits a plain `getelementptr` (see above). So on
   this path a subscript past the upper bound is undefined behaviour the
   optimizer may exploit, and with `-fno-index-check` a negative one is too.
@@ -527,12 +535,12 @@ the MLIR path is checked on aarch64, armhf and riscv64 as well as the host.
 ## Continuous integration
 
 [`ci.yml`](.github/workflows/ci.yml) builds with gcc and clang, in Debug and
-Release, with warnings as errors, and runs every suite in each. Three more gcc
-Debug jobs widen that: one against LLVM 23, whose header assertions caught a
-bug LLVM 21 let through, and two with `-DCMINUS_ENABLE_MLIR=ON`, against
-LLVM 21 and 23. Another repeats the suites under ASan and UBSan, and the last
-parses the Yocto layer. Reproduce any of it locally with the options in the
-build table above.
+Release, with warnings as errors, and runs every suite in each. Two more gcc
+Debug jobs widen that, both against LLVM 23: one whose header assertions
+caught a bug LLVM 21 let through, and one with `-DCMINUS_ENABLE_MLIR=ON`.
+Another repeats the suites under ASan and UBSan, and the last parses the
+Yocto layer. Reproduce any of it locally with the options in the build table
+above.
 
 [`release.yml`](.github/workflows/release.yml) reacts to a `v*` tag: it builds
 Release, refuses to continue unless the tests pass, and publishes a tarball of

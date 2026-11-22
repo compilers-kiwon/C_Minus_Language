@@ -75,9 +75,8 @@ struct IndexCheckLowering : mlir::OpRewritePattern<IndexCheckOp> {
     mlir::LLVM::UnreachableOp::create(rewriter, loc);
 
     rewriter.setInsertionPointToEnd(current);
-    // ConstantOp, not ConstantIntOp: see MLIRGenerator::int32 in MLIRGen.cpp.
-    mlir::Value zero = mlir::arith::ConstantOp::create(
-        rewriter, loc, rewriter.getI32IntegerAttr(0));
+    mlir::Value zero = mlir::arith::ConstantIntOp::create(
+        rewriter, loc, rewriter.getI32Type(), 0);
     mlir::Value negative = mlir::arith::CmpIOp::create(
         rewriter, loc, mlir::arith::CmpIPredicate::slt, index, zero);
     mlir::cf::CondBranchOp::create(rewriter, loc, negative, fail, ok);
