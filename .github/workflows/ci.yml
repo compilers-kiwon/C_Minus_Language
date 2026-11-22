@@ -30,8 +30,8 @@ jobs:
         compiler: [gcc, clang]
         build_type: [Debug, Release]
         llvm: ["21"]
-        # An axis of its own, so that the MLIR entry below makes a new job
-        # instead of being merged into gcc / Debug.
+        # An axis of its own, so that the MLIR entries below make new jobs
+        # instead of being merged into gcc / Debug and gcc / Release.
         mlir: ["OFF"]
         include:
           # The newest LLVM as well, in Debug so that the assertions in its
@@ -46,6 +46,13 @@ jobs:
           # for it and the one openembedded-core carries.
           - compiler: gcc
             build_type: Debug
+            llvm: "23"
+            mlir: "ON"
+          # And in Release: GCC's optimizer adds warnings that a Debug build
+          # never sees, one of which came from the code mlir-tblgen generates.
+          # The Yocto layer compiles this path with -O2 as well.
+          - compiler: gcc
+            build_type: Release
             llvm: "23"
             mlir: "ON"
     steps:

@@ -535,12 +535,12 @@ the MLIR path is checked on aarch64, armhf and riscv64 as well as the host.
 ## Continuous integration
 
 [`ci.yml`](.github/workflows/ci.yml) builds with gcc and clang, in Debug and
-Release, with warnings as errors, and runs every suite in each. Two more gcc
-Debug jobs widen that, both against LLVM 23: one whose header assertions
-caught a bug LLVM 21 let through, and one with `-DCMINUS_ENABLE_MLIR=ON`.
-Another repeats the suites under ASan and UBSan, and the last parses the
-Yocto layer. Reproduce any of it locally with the options in the build table
-above.
+Release, with warnings as errors, and runs every suite in each. Three more gcc
+jobs widen that, all against LLVM 23: one in Debug, whose header assertions
+caught a bug LLVM 21 let through, and two with `-DCMINUS_ENABLE_MLIR=ON`, in
+Debug and in Release. Another repeats the suites under ASan and UBSan, and the
+last parses the Yocto layer. Reproduce any of it locally with the options in
+the build table above.
 
 [`release.yml`](.github/workflows/release.yml) reacts to a `v*` tag: it builds
 Release, refuses to continue unless the tests pass, and publishes a tarball of
